@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0D0D0D" />
+    <title>Toka - Events & Ticketing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <div class="app-shell">
+        <div id="app-toast" class="toast" aria-live="polite"></div>
+
+        <div class="screen onboarding-screen" id="screen-onboarding">
+            <div class="container onboarding-shell">
+                <div class="onboarding-layout card" id="onboarding-form">
+                    <div id="onboarding-slide-container"></div>
+                    <div class="dot-row" id="onboarding-dots"></div>
+                    <div class="onboarding-actions">
+                        <button type="button" class="button button-ghost" onclick="goOnboardingBack()">Back</button>
+                        <button type="button" class="button button-primary" id="onboarding-cta" onclick="goOnboardingNext()">Next →</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="screen active" id="screen-home">
+            <div class="container">
+                <div class="topbar">
+                    <div class="topbar-left">
+                        <div class="avatar" id="home-logo" style="background:#F4500A">T</div>
+                        <div>
+                            <p class="eyebrow">Toka</p>
+                            <h2 class="brand-title">Events & ticketing</h2>
+                        </div>
+                    </div>
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-profile')">Profile</button>
+                </div>
+
+                <div class="hero-card">
+                    <div class="hero-copy">
+                        <p class="eyebrow">Community-first experiences</p>
+                        <h1>Step into it.</h1>
+                        <p class="text-muted">Discover events. Get your ticket. Show up.</p>
+                        <div class="hero-actions">
+                            <button type="button" class="button button-primary" onclick="showScreen('screen-discover')">Explore Events</button>
+                            <button type="button" class="button button-secondary" onclick="showScreen('screen-host')">Host an Event</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <p class="eyebrow">What is moving right now</p>
+                        <h3>Bold nights. Clean checkouts. Real community energy.</h3>
+                        <p class="text-muted">Toka makes it simple to find what is happening nearby and make your own event go live fast.</p>
+                    </div>
+                </div>
+
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Browse by vibe</p>
+                        <h3>Categories</h3>
+                    </div>
+                </div>
+                <div id="home-category-chips" class="chip-strip"></div>
+
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Fresh picks</p>
+                        <h3>Happening Soon</h3>
+                    </div>
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-discover')">See all</button>
+                </div>
+                <div id="home-upcoming-grid" class="grid event-grid"></div>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-discover">
+            <div class="container">
+                <div class="topbar">
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-home')">← Home</button>
+                    <h2>Discover</h2>
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-my-tickets')">My Tickets</button>
+                </div>
+
+                <div class="search-bar card">
+                    <span>⌕</span>
+                    <input id="discover-search" type="search" placeholder="Search events, artists, venues..." autocomplete="off" />
+                </div>
+
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">When</p>
+                        <h3>Filter by time</h3>
+                    </div>
+                </div>
+                <div id="discover-time-filters" class="chip-strip"></div>
+
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Category</p>
+                        <h3>Refine the view</h3>
+                    </div>
+                </div>
+                <div id="discover-category-chips" class="chip-strip"></div>
+
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Results</p>
+                        <h3>Events</h3>
+                    </div>
+                </div>
+                <div id="discover-results" class="grid event-grid"></div>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-event-detail">
+            <div class="container detail-layout">
+                <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-discover')">← Back</button>
+                <div class="detail-hero" id="detail-hero" style="--card-gradient: linear-gradient(135deg, #2E2E2E, #F4500A)">
+                    <div class="detail-hero-emoji">🎫</div>
+                </div>
+                <div class="detail-content">
+                    <span class="badge" id="detail-badge">Event</span>
+                    <h1 class="detail-title" id="detail-title">Event title</h1>
+                    <div class="detail-organiser" id="detail-organiser"></div>
+                    <p class="text-muted" id="detail-description"></p>
+                    <div class="detail-meta-grid" id="detail-meta"></div>
+                    <div class="card">
+                        <p class="eyebrow">Who's Going</p>
+                        <div id="detail-going"></div>
+                    </div>
+                </div>
+                <div class="detail-footer">
+                    <div class="detail-footer-inner">
+                        <div>
+                            <p class="eyebrow">Ticket type</p>
+                            <strong id="detail-price-line">General Admission</strong>
+                        </div>
+                        <button type="button" class="button button-primary" id="detail-ticket-button" onclick="openRegistration(TOKA_APP_STATE.selectedEventId)">Get Ticket</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-register">
+            <div class="container register-layout">
+                <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-event-detail')">← Back</button>
+                <div class="summary-card" id="register-summary"></div>
+                <form id="register-form" class="grid" novalidate>
+                    <div class="form-stack">
+                        <div class="field-group">
+                            <label for="register-name">Full Name *</label>
+                            <input id="register-name" type="text" placeholder="Your full name" required />
+                        </div>
+                        <div class="field-group">
+                            <label for="register-phone">Phone Number *</label>
+                            <div class="input-prefix">
+                                <span>+256</span>
+                                <input id="register-phone" type="tel" placeholder="700 000 000" required />
+                            </div>
+                        </div>
+                        <div class="field-group">
+                            <label for="register-email">Email</label>
+                            <input id="register-email" type="email" placeholder="you@example.com" />
+                        </div>
+                        <div class="field-group">
+                            <label for="register-source">How did you hear about this?</label>
+                            <select id="register-source">
+                <option>WhatsApp</option>
+                <option>Friend</option>
+                <option>Social Media</option>
+                <option>Poster</option>
+                <option>Other</option>
+              </select>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <p class="eyebrow">Payment method</p>
+                        <div id="payment-methods" class="radio-group"></div>
+                        <div id="payment-phone-wrapper" class="field-group section-card">
+                            <label for="payment-phone">Enter the number to charge</label>
+                            <input id="payment-phone" type="tel" placeholder="Charge this number" />
+                        </div>
+                    </div>
+
+                    <label class="inline-row card" for="register-terms">
+            <input id="register-terms" type="checkbox" />
+            <span>I agree to the event terms</span>
+          </label>
+
+                    <button type="submit" class="button button-primary button-block">Confirm & Get Ticket</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-ticket-confirmed">
+            <div class="container confirm-layout">
+                <div class="confirm-card">
+                    <div class="confirm-mark"></div>
+                    <div>
+                        <p class="eyebrow">Confirmed</p>
+                        <h2>You're in! 🎉</h2>
+                        <p id="confirmed-event-name" class="text-muted"></p>
+                        <p id="confirmed-event-date"></p>
+                    </div>
+                    <div class="confirm-ticket-code" id="confirmed-code">TOKA-XXXXXX</div>
+                    <div class="qr-box" id="confirmed-qr"></div>
+                    <p class="text-muted">Attendee</p>
+                    <h3 id="confirmed-attendee"></h3>
+                    <div class="confirm-link">
+                        <code id="confirmed-referral">toka.app/ref/your-code</code>
+                        <button type="button" class="button button-secondary button-small" id="confirmed-copy-button">Copy</button>
+                    </div>
+                    <div class="onboarding-actions" style="width:100%">
+                        <button type="button" class="button button-secondary" id="confirmed-share-button">Share with friends</button>
+                        <button type="button" class="button button-primary" onclick="showScreen('screen-my-tickets')">View My Tickets</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-my-tickets">
+            <div class="container">
+                <div class="topbar">
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-home')">← Home</button>
+                    <h2>My Tickets</h2>
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-discover')">Discover</button>
+                </div>
+
+                <div id="tickets-empty" class="empty-state card">
+                    <div class="ticket-empty-art">
+                        <span class="ticket-line one"></span>
+                        <span class="ticket-line two"></span>
+                        <span class="ticket-line three"></span>
+                    </div>
+                    <h3>No tickets yet. Something is always happening.</h3>
+                    <button type="button" class="button button-primary" onclick="showScreen('screen-discover')">Explore Events</button>
+                </div>
+
+                <div id="tickets-list" class="grid section-card"></div>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-host">
+            <div class="container host-layout">
+                <div class="topbar">
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-home')">← Home</button>
+                    <div>
+                        <p class="eyebrow">Organiser</p>
+                        <h2>Create your event</h2>
+                    </div>
+                    <div id="host-step-indicator" class="badge">1 of 3 steps</div>
+                </div>
+
+                <form id="host-form" class="grid" novalidate>
+                    <section id="host-step-one" class="card">
+                        <div class="section-head">
+                            <div>
+                                <p class="eyebrow">Step 1</p>
+                                <h3>Event Basics</h3>
+                            </div>
+                        </div>
+                        <div class="form-stack">
+                            <div class="field-group">
+                                <label for="host-name">Event Name *</label>
+                                <input id="host-name" type="text" placeholder="Your event name" />
+                            </div>
+                            <div class="field-group">
+                                <label for="host-category">Category *</label>
+                                <select id="host-category">
+                  <option>Music</option>
+                  <option>Sports</option>
+                  <option>Business</option>
+                  <option>Art</option>
+                  <option>Faith</option>
+                  <option>Food & Drinks</option>
+                  <option>Tech</option>
+                  <option>Campus</option>
+                  <option>Community</option>
+                </select>
+                            </div>
+                            <div class="register-two-col">
+                                <div class="field-group">
+                                    <label for="host-date">Date *</label>
+                                    <input id="host-date" type="date" />
+                                </div>
+                                <div class="field-group">
+                                    <label for="host-start">Start Time *</label>
+                                    <input id="host-start" type="time" />
+                                </div>
+                                <div class="field-group">
+                                    <label for="host-end">End Time</label>
+                                    <input id="host-end" type="time" />
+                                </div>
+                            </div>
+                            <div class="field-group">
+                                <label for="host-venue">Location / Venue Name *</label>
+                                <input id="host-venue" type="text" placeholder="Venue name" />
+                            </div>
+                            <div class="field-group">
+                                <label for="host-city">City *</label>
+                                <input id="host-city" type="text" placeholder="City" />
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="host-step-two" class="card hidden">
+                        <div class="section-head">
+                            <div>
+                                <p class="eyebrow">Step 2</p>
+                                <h3>Tickets & Pricing</h3>
+                            </div>
+                        </div>
+                        <div class="form-stack">
+                            <label class="inline-row card" for="host-free">
+                <input id="host-free" type="checkbox" />
+                <span>Is this event free?</span>
+              </label>
+                            <div class="field-group">
+                                <label for="host-price">Ticket Price (UGX)</label>
+                                <input id="host-price" type="number" min="0" step="1000" placeholder="25000" />
+                            </div>
+                            <div class="field-group">
+                                <label for="host-capacity">Total Ticket Capacity *</label>
+                                <input id="host-capacity" type="number" min="1" step="1" placeholder="200" />
+                            </div>
+                            <div class="field-group">
+                                <label for="host-description">Event Description</label>
+                                <textarea id="host-description" maxlength="300" placeholder="Tell people why they should come."></textarea>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="host-step-three" class="card hidden">
+                        <div class="section-head">
+                            <div>
+                                <p class="eyebrow">Step 3</p>
+                                <h3>Review & Publish</h3>
+                            </div>
+                        </div>
+                        <div id="host-preview"></div>
+                        <div id="host-success" class="success-panel hidden"></div>
+                    </section>
+
+                    <div class="step-actions">
+                        <button type="button" class="button button-secondary" onclick="goHostBack()">Back</button>
+                        <button type="button" class="button button-primary" id="host-next-button" onclick="goHostNext()">Next</button>
+                        <button type="button" class="button button-primary hidden" id="host-publish-button" onclick="publishEvent()">Publish Event</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-profile">
+            <div class="container profile-layout">
+                <div class="topbar">
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-home')">← Home</button>
+                    <h2>Profile</h2>
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-my-tickets')">Tickets</button>
+                </div>
+
+                <div class="profile-card">
+                    <div class="profile-top">
+                        <div class="inline-row">
+                            <div class="avatar" id="profile-avatar">T</div>
+                            <div>
+                                <h3 id="profile-name">Your Profile</h3>
+                                <p id="profile-phone" class="text-muted"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="profile-stats" class="stat-row section-card"></div>
+                </div>
+
+                <div class="card">
+                    <div class="section-head">
+                        <div>
+                            <p class="eyebrow">My Interests</p>
+                            <h3>Tap to edit</h3>
+                        </div>
+                    </div>
+                    <div id="profile-interests" class="chip-grid"></div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="section-head">
+                        <div>
+                            <p class="eyebrow">Settings</p>
+                            <h3>Simple controls</h3>
+                        </div>
+                    </div>
+                    <div id="profile-settings" class="settings-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <nav class="bottom-nav" id="bottom-nav">
+            <button type="button" onclick="showScreen('screen-home')" class="nav-item active" data-screen="screen-home">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Home</span>
+      </button>
+            <button type="button" onclick="showScreen('screen-discover')" class="nav-item" data-screen="screen-discover">
+        <span class="nav-icon">🔍</span>
+        <span class="nav-label">Discover</span>
+      </button>
+            <button type="button" onclick="showScreen('screen-my-tickets')" class="nav-item" data-screen="screen-my-tickets">
+        <span class="nav-icon">🎫</span>
+        <span class="nav-label">Tickets</span>
+      </button>
+            <button type="button" onclick="showScreen('screen-profile')" class="nav-item" data-screen="screen-profile">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">Profile</span>
+      </button>
+        </nav>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,344 @@
+// Toka data layer and localStorage helpers
+
+const TOKA_STORAGE_KEYS = {
+    onboardingComplete: 'toka_onboarding_complete',
+    userProfile: 'toka_user_profile',
+    tickets: 'toka_tickets',
+    events: 'toka_events',
+    referralCode: 'toka_referral_code'
+};
+
+const TOKA_CATEGORY_OPTIONS = [
+    'Music',
+    'Sports',
+    'Business',
+    'Art',
+    'Faith',
+    'Food & Drinks',
+    'Tech',
+    'Campus',
+    'Community'
+];
+
+const TOKA_INTEREST_OPTIONS = [
+    'Music',
+    'Sports',
+    'Business',
+    'Art',
+    'Faith',
+    'Food & Drinks',
+    'Tech',
+    'Campus',
+    'Community'
+];
+
+const MOCK_EVENTS = [{
+        id: 'evt001',
+        name: 'Kampala Jazz Night',
+        category: 'Music',
+        emoji: '🎷',
+        gradient: 'linear-gradient(135deg, #F4500A, #F7B731)',
+        date: '2026-04-18',
+        time: '7:00 PM',
+        endTime: '11:00 PM',
+        venue: 'Serena Hotel Ballroom',
+        city: 'Kampala',
+        price: 25000,
+        currency: 'UGX',
+        capacity: 200,
+        registered: 147,
+        description: 'An evening of soulful jazz with Uganda’s finest musicians, warm lighting, and a crowd that knows how to stay for one more set.',
+        organiser: 'Kampala Arts Collective',
+        tags: ['jazz', 'music', 'nightlife'],
+        attendees: ['Amina K', 'Brian T', 'Joan M', 'David K', 'Nora S']
+    },
+    {
+        id: 'evt002',
+        name: 'Mbarara Campus Tech Jam',
+        category: 'Tech',
+        emoji: '💻',
+        gradient: 'linear-gradient(135deg, #0D0D0D, #F4500A)',
+        date: '2026-04-12',
+        time: '2:00 PM',
+        endTime: '6:00 PM',
+        venue: 'Nkokonjeru Innovation Hub',
+        city: 'Mbarara',
+        price: 0,
+        currency: 'UGX',
+        capacity: 300,
+        registered: 214,
+        description: 'A free campus tech meet-up for builders, founders, and curious students. Expect demos, networking, and practical talks that keep things moving.',
+        organiser: 'Mbarara Tech Circle',
+        tags: ['tech', 'students', 'innovation'],
+        attendees: ['Ibrahim S', 'Patricia N', 'Kevin R', 'Faith A']
+    },
+    {
+        id: 'evt003',
+        name: 'Founders Breakfast Forum',
+        category: 'Business',
+        emoji: '📈',
+        gradient: 'linear-gradient(135deg, #F7B731, #F4500A)',
+        date: '2026-04-22',
+        time: '8:00 AM',
+        endTime: '11:00 AM',
+        venue: 'The Square, Kololo',
+        city: 'Kampala',
+        price: 30000,
+        currency: 'UGX',
+        capacity: 120,
+        registered: 89,
+        description: 'A focused morning for founders, operators, and investors to trade ideas, sharpen pitches, and build useful connections over breakfast.',
+        organiser: 'Rise Africa Network',
+        tags: ['founders', 'business', 'networking'],
+        attendees: ['Sheila B', 'Martin O', 'Jude P', 'Leah C']
+    },
+    {
+        id: 'evt004',
+        name: 'Sunset Beach Games',
+        category: 'Sports',
+        emoji: '🏆',
+        gradient: 'linear-gradient(135deg, #C6F135, #F7B731)',
+        date: '2026-04-27',
+        time: '4:00 PM',
+        endTime: '8:30 PM',
+        venue: 'Lido Beach Grounds',
+        city: 'Entebbe',
+        price: 15000,
+        currency: 'UGX',
+        capacity: 500,
+        registered: 305,
+        description: 'A high-energy sports afternoon with beach games, team challenges, music, and a sunset finish that feels like a proper weekend reset.',
+        organiser: 'Entebbe Active Crew',
+        tags: ['sports', 'beach', 'fun'],
+        attendees: ['Kelvin D', 'Sandra U', 'Mike A', 'Ruth K', 'Lydia P']
+    },
+    {
+        id: 'evt005',
+        name: 'Harvest Praise Conference',
+        category: 'Faith',
+        emoji: '🙏',
+        gradient: 'linear-gradient(135deg, #F4500A, #0D0D0D)',
+        date: '2026-05-03',
+        time: '9:00 AM',
+        endTime: '5:00 PM',
+        venue: 'Redeemed Centre',
+        city: 'Kampala',
+        price: 0,
+        currency: 'UGX',
+        capacity: 800,
+        registered: 621,
+        description: 'A free faith gathering with worship, teaching, and a welcoming atmosphere for anyone looking to reconnect and recharge.',
+        organiser: 'City Faith Partners',
+        tags: ['faith', 'conference', 'worship'],
+        attendees: ['Grace N', 'Moses B', 'Eunice T', 'Peter W']
+    },
+    {
+        id: 'evt006',
+        name: 'Late Plate Food Bazaar',
+        category: 'Food & Drinks',
+        emoji: '🍔',
+        gradient: 'linear-gradient(135deg, #2E2E2E, #F7B731)',
+        date: '2026-05-10',
+        time: '5:00 PM',
+        endTime: '11:30 PM',
+        venue: 'Plot 16 Rooftop',
+        city: 'Kampala',
+        price: 20000,
+        currency: 'UGX',
+        capacity: 250,
+        registered: 176,
+        description: 'A food and drinks popup with street food, cocktails, and slow beats. Built for people who love a strong plate and a longer conversation.',
+        organiser: 'Tasty Streets UG',
+        tags: ['food', 'drinks', 'popup'],
+        attendees: ['Alex J', 'Mariam Q', 'Dennis L', 'Tracy H']
+    },
+    {
+        id: 'evt007',
+        name: 'Canvas & Clay Expo',
+        category: 'Art',
+        emoji: '🎨',
+        gradient: 'linear-gradient(135deg, #F7B731, #C6F135)',
+        date: '2026-05-15',
+        time: '11:00 AM',
+        endTime: '6:00 PM',
+        venue: 'Makerere Art Court',
+        city: 'Kampala',
+        price: 0,
+        currency: 'UGX',
+        capacity: 180,
+        registered: 93,
+        description: 'An art exhibition and creative market featuring painters, ceramic artists, live sketches, and open conversations about making and meaning.',
+        organiser: 'Kati Kati Art Space',
+        tags: ['art', 'exhibition', 'creative'],
+        attendees: ['Nelly S', 'Kato R', 'Abigail P']
+    },
+    {
+        id: 'evt008',
+        name: 'Mbarara Green Cleanup Drive',
+        category: 'Community',
+        emoji: '🌍',
+        gradient: 'linear-gradient(135deg, #C6F135, #0D0D0D)',
+        date: '2026-05-18',
+        time: '8:30 AM',
+        endTime: '1:00 PM',
+        venue: 'Mbarara Town Centre',
+        city: 'Mbarara',
+        price: 0,
+        currency: 'UGX',
+        capacity: 250,
+        registered: 168,
+        description: 'A community cleanup and social impact day bringing volunteers, local businesses, and civic groups together for visible change.',
+        organiser: 'Mbarara Green Volunteers',
+        tags: ['community', 'cleanup', 'volunteering'],
+        attendees: ['Gloria A', 'James K', 'Ben O', 'Hellen M', 'Isaac T']
+    }
+];
+
+function safeJsonParse(value, fallback) {
+    try {
+        return value ? JSON.parse(value) : fallback;
+    } catch (error) {
+        return fallback;
+    }
+}
+
+function readStorage(key, fallback) {
+    try {
+        return safeJsonParse(localStorage.getItem(key), fallback);
+    } catch (error) {
+        return fallback;
+    }
+}
+
+function writeStorage(key, value) {
+    try {
+        localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+        return false;
+    }
+    return true;
+}
+
+function getTickets() {
+    return readStorage(TOKA_STORAGE_KEYS.tickets, []);
+}
+
+function saveTicket(ticket) {
+    const tickets = getTickets();
+    const existingIndex = tickets.findIndex((item) => item.id === ticket.id);
+    if (existingIndex >= 0) {
+        tickets[existingIndex] = ticket;
+    } else {
+        tickets.unshift(ticket);
+    }
+    writeStorage(TOKA_STORAGE_KEYS.tickets, tickets);
+    return ticket;
+}
+
+function getSavedEvents() {
+    return readStorage(TOKA_STORAGE_KEYS.events, []);
+}
+
+function saveEvent(event) {
+    const events = getSavedEvents();
+    const existingIndex = events.findIndex((item) => item.id === event.id);
+    if (existingIndex >= 0) {
+        events[existingIndex] = event;
+    } else {
+        events.unshift(event);
+    }
+    writeStorage(TOKA_STORAGE_KEYS.events, events);
+    return event;
+}
+
+function getEvents() {
+    const savedEvents = getSavedEvents();
+    const mergedEvents = new Map();
+
+    MOCK_EVENTS.forEach((event) => {
+        mergedEvents.set(event.id, {...event });
+    });
+
+    savedEvents.forEach((event) => {
+        mergedEvents.set(event.id, {...mergedEvents.get(event.id), ...event });
+    });
+
+    return Array.from(mergedEvents.values()).sort((left, right) => new Date(left.date) - new Date(right.date));
+}
+
+function getUserProfile() {
+    return readStorage(TOKA_STORAGE_KEYS.userProfile, {
+        name: '',
+        phone: '',
+        email: '',
+        interests: [],
+        notificationsEnabled: true,
+        language: 'English'
+    });
+}
+
+function saveUserProfile(profile) {
+    const currentProfile = getUserProfile();
+    const nextProfile = {...currentProfile, ...profile };
+    writeStorage(TOKA_STORAGE_KEYS.userProfile, nextProfile);
+    return nextProfile;
+}
+
+function generateRandomSegment(length) {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let output = '';
+    for (let index = 0; index < length; index += 1) {
+        output += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return output;
+}
+
+function generateTicketCode() {
+    return 'TOKA-' + generateRandomSegment(6);
+}
+
+function slugifyName(name) {
+    return String(name || 'friend')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'friend';
+}
+
+function generateReferralCode(name) {
+    return slugifyName(name) + '-' + generateRandomSegment(4);
+}
+
+function getOnboardingComplete() {
+    try {
+        return localStorage.getItem(TOKA_STORAGE_KEYS.onboardingComplete) === 'true';
+    } catch (error) {
+        return false;
+    }
+}
+
+function setOnboardingComplete(isComplete) {
+    try {
+        localStorage.setItem(TOKA_STORAGE_KEYS.onboardingComplete, String(Boolean(isComplete)));
+    } catch (error) {
+        return false;
+    }
+    return true;
+}
+
+function getReferralCode() {
+    try {
+        return localStorage.getItem(TOKA_STORAGE_KEYS.referralCode) || '';
+    } catch (error) {
+        return '';
+    }
+}
+
+function setReferralCode(code) {
+    try {
+        localStorage.setItem(TOKA_STORAGE_KEYS.referralCode, code);
+    } catch (error) {
+        return false;
+    }
+    return true;
+}
