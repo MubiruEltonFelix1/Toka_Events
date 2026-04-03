@@ -1176,12 +1176,15 @@ textarea {
     }
 }
 
+
 /* ======================================================
    TOKA - EVENT ENGAGEMENT (Comments + Updates)
    Append to bottom of style.css
 ====================================================== */
 
+
 /* -- SECTION WRAPPER ----------------------------------- */
+
 .event-section {
     padding: 20px 16px 0;
     max-width: 660px;
@@ -1228,7 +1231,9 @@ textarea {
     margin-right: auto;
 }
 
+
 /* -- ORGANISER UPDATES --------------------------------- */
+
 .updates-list {
     display: flex;
     flex-direction: column;
@@ -1289,7 +1294,9 @@ textarea {
     color: var(--text-primary);
 }
 
+
 /* -- EMPTY STATES -------------------------------------- */
+
 .empty-updates,
 .empty-comments {
     text-align: center;
@@ -1305,7 +1312,9 @@ textarea {
     opacity: 0.7;
 }
 
+
 /* -- COMMENTS LIST ------------------------------------- */
+
 .comments-list {
     display: flex;
     flex-direction: column;
@@ -1352,7 +1361,9 @@ textarea {
     border-radius: var(--radius) 0 var(--radius) var(--radius);
 }
 
+
 /* Own comments align to the right */
+
 .own-comment {
     flex-direction: row-reverse;
 }
@@ -1423,7 +1434,9 @@ textarea {
     transform: scale(0.9);
 }
 
+
 /* -- COMMENT COMPOSER ---------------------------------- */
+
 .comment-composer {
     display: flex;
     gap: 10px;
@@ -1449,7 +1462,9 @@ textarea {
     flex: 1;
 }
 
+
 /* -- SHARED TEXTAREA ----------------------------------- */
+
 .toka-textarea {
     width: 100%;
     background: var(--surface-raised);
@@ -1475,7 +1490,9 @@ textarea {
     opacity: 0.6;
 }
 
+
 /* -- FORM FOOTER --------------------------------------- */
+
 .form-footer {
     display: flex;
     align-items: center;
@@ -1488,7 +1505,9 @@ textarea {
     color: var(--text-muted);
 }
 
+
 /* -- ACTION BUTTONS ------------------------------------ */
+
 .btn-post-comment,
 .btn-post-update {
     background: var(--toka-orange);
@@ -1515,7 +1534,9 @@ textarea {
     transform: scale(0.96);
 }
 
+
 /* -- NO TICKET PROMPT ---------------------------------- */
+
 .no-ticket-prompt {
     display: flex;
     align-items: center;
@@ -1535,7 +1556,9 @@ textarea {
     color: var(--text-muted);
 }
 
+
 /* -- POST UPDATE FORM ---------------------------------- */
+
 .post-update-form {
     background: rgba(244, 80, 10, 0.05);
     border: 1px solid rgba(244, 80, 10, 0.2);
@@ -1544,31 +1567,31 @@ textarea {
     margin-top: 12px;
 }
 
+
 /* -- SHAKE ANIMATION (validation) ---------------------- */
+
 @keyframes shake {
     0%,
     100% {
         transform: translateX(0);
     }
-
     20% {
         transform: translateX(-6px);
     }
-
     40% {
         transform: translateX(6px);
     }
-
     60% {
         transform: translateX(-4px);
     }
-
     80% {
         transform: translateX(4px);
     }
 }
 
+
 /* -- MOBILE PADDING (space above bottom nav) ----------- */
+
 #comments-section {
     padding-bottom: 100px;
 }
