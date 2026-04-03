@@ -342,3 +342,147 @@ function setReferralCode(code) {
     }
     return true;
 }
+
+// -- KEY FORMAT -----------------------------------------------------------
+// Comments for event "evt001" -> localStorage key: "toka_comments_evt001"
+// Updates  for event "evt001" -> localStorage key: "toka_updates_evt001"
+
+function getComments(eventId) {
+    try {
+        const raw = localStorage.getItem('toka_comments_' + eventId);
+        return raw ? JSON.parse(raw) : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function saveComment(eventId, comment) {
+    const comments = getComments(eventId);
+    comments.push(comment);
+    localStorage.setItem('toka_comments_' + eventId, JSON.stringify(comments));
+}
+
+function getUpdates(eventId) {
+    try {
+        const raw = localStorage.getItem('toka_updates_' + eventId);
+        return raw ? JSON.parse(raw) : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function saveUpdate(eventId, update) {
+    const updates = getUpdates(eventId);
+    updates.push(update);
+    localStorage.setItem('toka_updates_' + eventId, JSON.stringify(updates));
+}
+
+function toggleLike(eventId, commentId) {
+    const comments = getComments(eventId);
+    const profile = getUserProfile();
+    if (!profile || !profile.name) {
+        return;
+    }
+
+    const comment = comments.find((item) => item.id === commentId);
+    if (!comment) {
+        return;
+    }
+
+    comment.likedBy = Array.isArray(comment.likedBy) ? comment.likedBy : [];
+    comment.likes = Number(comment.likes || 0);
+
+    const alreadyLiked = comment.likedBy.indexOf(profile.name) !== -1;
+    if (alreadyLiked) {
+        comment.likedBy = comment.likedBy.filter((name) => name !== profile.name);
+        comment.likes = Math.max(0, comment.likes - 1);
+    } else {
+        comment.likedBy.push(profile.name);
+        comment.likes += 1;
+    }
+
+    localStorage.setItem('toka_comments_' + eventId, JSON.stringify(comments));
+    return comment.likes;
+}
+
+function userHasTicket(eventId) {
+    // Returns true if the current user has a ticket for this event.
+    const tickets = getTickets();
+    return tickets.some((ticket) => ticket.eventId === eventId);
+}
+
+function userIsOrganiser(event) {
+    // Returns true if the current user created this event.
+    const profile = getUserProfile();
+    if (!profile) {
+        return false;
+    }
+    return event.createdBy === 'user' ||
+        event.organiser === profile.name ||
+        event.organiserName === profile.name ||
+        event.organiserPhone === profile.phone;
+}
+
+// Pre-seed 2-3 comments per featured event so the feature
+// does not look empty on first load. Call seedMockComments() once on init.
+function seedMockComments() {
+    // Only seed once.
+    if (localStorage.getItem('toka_comments_seeded')) {
+        return;
+    }
+
+    const mockComments = {
+        evt001: [{
+                id: 'cmt_001',
+                eventId: 'evt001',
+                author: 'Amara K',
+                initials: 'AK',
+                color: '#F4500A',
+                text: 'Been waiting for this all year. The lineup is incredible! 🎷',
+                timestamp: Date.now() - 7200000,
+                likes: 4,
+                likedBy: []
+            },
+            {
+                id: 'cmt_002',
+                eventId: 'evt001',
+                author: 'David M',
+                initials: 'DM',
+                color: '#F7B731',
+                text: 'Anyone going alone? Would love to link up beforehand.',
+                timestamp: Date.now() - 3600000,
+                likes: 2,
+                likedBy: []
+            }
+        ],
+        evt002: [{
+            id: 'cmt_003',
+            eventId: 'evt002',
+            author: 'Grace T',
+            initials: 'GT',
+            color: '#C6F135',
+            text: 'Free entry AND top speakers? Toka really came through.',
+            timestamp: Date.now() - 86400000,
+            likes: 7,
+            likedBy: []
+        }]
+    };
+
+    Object.keys(mockComments).forEach((eventId) => {
+        if (getComments(eventId).length === 0) {
+            localStorage.setItem('toka_comments_' + eventId, JSON.stringify(mockComments[eventId]));
+        }
+    });
+
+    if (getUpdates('evt001').length === 0) {
+        saveUpdate('evt001', {
+            id: 'upd_001',
+            eventId: 'evt001',
+            text: '🎉 We just confirmed a second performer. This evening just got even better - details dropping soon.',
+            timestamp: Date.now() - 10800000,
+            type: 'exciting'
+        });
+    }
+
+    localStorage.setItem('toka_comments_seeded', 'true');
+}

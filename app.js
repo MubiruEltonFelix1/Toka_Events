@@ -342,7 +342,356 @@ function openEventDetail(eventId) {
 
   TOKA_APP_STATE.selectedEventId = eventId;
   renderDetailScreen(event);
+
+  // Store event context for engagement actions.
+  const detailScreen = document.getElementById('screen-event-detail');
+  if (detailScreen) {
+    detailScreen.setAttribute('data-event-id', eventId);
+  }
+
+  // Load comments and organiser updates before opening the detail screen.
+  loadEventEngagement(eventId);
   showScreen('screen-event-detail');
+}
+
+// -- MAIN LOADER ----------------------------------------------------------
+function loadEventEngagement(eventId) {
+  renderUpdates(eventId);
+  renderComments(eventId);
+  setupEngagementUI(eventId);
+}
+
+// -- RENDER ORGANISER UPDATES ---------------------------------------------
+function renderUpdates(eventId) {
+  const updates = getUpdates(eventId);
+  const list = document.getElementById('updates-list');
+
+  if (!list) {
+    return;
+  }
+
+  if (updates.length === 0) {
+    list.innerHTML = `
+      <div class="empty-updates" id="empty-updates">
+        <p>No updates yet. Check back closer to the event.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const sorted = updates.slice().sort((left, right) => right.timestamp - left.timestamp);
+  list.innerHTML = sorted.map((update) => {
+    const typeClass = 'update-' + (update.type || 'info');
+    const timeAgo = formatTimeAgo(update.timestamp);
+    return `
+      <div class="update-card ${typeClass}">
+        <div class="update-header">
+          <span class="update-icon">${getUpdateIcon(update.type)}</span>
+          <span class="update-label">Organiser Update</span>
+          <span class="update-time">${timeAgo}</span>
+        </div>
+        <p class="update-text">${escapeHtml(update.text)}</p>
+      </div>
+    `;
+  }).join('');
+}
+
+function getUpdateIcon(type) {
+  if (type === 'warning') {
+    return '⚠️';
+  }
+  if (type === 'exciting') {
+    return '🎉';
+  }
+  return '📣';
+}
+
+// -- RENDER COMMENTS -------------------------------------------------------
+function renderComments(eventId) {
+  const comments = getComments(eventId);
+  const list = document.getElementById('comments-list');
+  const badge = document.getElementById('comment-count-badge');
+  const profile = getUserProfile();
+
+  if (!list) {
+    return;
+  }
+
+  if (badge) {
+    badge.textContent = comments.length;
+  }
+
+  if (comments.length === 0) {
+    list.innerHTML = `
+      <div class="empty-comments" id="empty-comments">
+        <p>Be the first to say something. 👋</p>
+        <p class="empty-sub">Only ticket holders can comment.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const sorted = comments.slice().sort((left, right) => left.timestamp - right.timestamp);
+  const currentUser = profile ? profile.name : null;
+
+  list.innerHTML = sorted.map((comment) => {
+    const isOwn = currentUser && comment.author === currentUser;
+    const likedBy = Array.isArray(comment.likedBy) ? comment.likedBy : [];
+    const likes = Number(comment.likes || 0);
+    const hasLiked = profile && likedBy.indexOf(profile.name) !== -1;
+    const timeAgo = formatTimeAgo(comment.timestamp);
+
+    return `
+      <div class="comment-item${isOwn ? ' own-comment' : ''}" data-comment-id="${escapeHtml(comment.id)}">
+        <div class="comment-avatar" style="background:${escapeHtml(comment.color || '#F4500A')}">
+          ${escapeHtml(comment.initials || getInitials(comment.author))}
+        </div>
+        <div class="comment-body">
+          <div class="comment-meta">
+            <span class="comment-author">${escapeHtml(comment.author)}${isOwn ? ' <span class="you-badge">You</span>' : ''}</span>
+            <span class="comment-time">${timeAgo}</span>
+          </div>
+          <p class="comment-text">${escapeHtml(comment.text)}</p>
+          <div class="comment-actions">
+            <button class="like-btn${hasLiked ? ' liked' : ''}" onclick="handleLike('${eventId}', '${comment.id}')">
+              ${hasLiked ? '❤️' : '🤍'} <span class="like-count">${likes}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  list.scrollTop = list.scrollHeight;
+}
+
+// -- SETUP UI VISIBILITY ---------------------------------------------------
+function setupEngagementUI(eventId) {
+  const profile = getUserProfile();
+  const event = getEvents().find((item) => item.id === eventId);
+  const hasTicket = userHasTicket(eventId);
+  const isOrganiser = event ? userIsOrganiser(event) : false;
+
+  const canComment = document.getElementById('can-comment');
+  const cannotComment = document.getElementById('cannot-comment');
+  const commenterAvatar = document.getElementById('commenter-avatar');
+
+  if (hasTicket && profile && profile.name) {
+    if (canComment) {
+      canComment.style.display = 'block';
+    }
+    if (cannotComment) {
+      cannotComment.style.display = 'none';
+    }
+    if (commenterAvatar) {
+      commenterAvatar.textContent = getInitials(profile.name);
+      commenterAvatar.style.background = getAvatarColor(profile.name);
+    }
+  } else {
+    if (canComment) {
+      canComment.style.display = 'none';
+    }
+    if (cannotComment) {
+      cannotComment.style.display = 'flex';
+    }
+  }
+
+  const updateForm = document.getElementById('post-update-form');
+  if (updateForm) {
+    updateForm.style.display = isOrganiser ? 'block' : 'none';
+  }
+
+  setupCharCount('comment-input', 'comment-char-count', 200);
+  setupCharCount('update-input', 'update-char-count', 280);
+}
+
+// -- POST A COMMENT --------------------------------------------------------
+function postComment() {
+  const input = document.getElementById('comment-input');
+  const profile = getUserProfile();
+
+  if (!input || !profile || !profile.name) {
+    return;
+  }
+
+  const text = input.value.trim();
+  if (text.length === 0) {
+    shakeElement(input);
+    return;
+  }
+  if (text.length > 200) {
+    return;
+  }
+
+  const eventId = document.getElementById('screen-event-detail')?.getAttribute('data-event-id');
+  if (!eventId || !userHasTicket(eventId)) {
+    return;
+  }
+
+  const comment = {
+    id: 'cmt_' + Date.now(),
+    eventId,
+    author: profile.name,
+    initials: getInitials(profile.name),
+    color: getAvatarColor(profile.name),
+    text,
+    timestamp: Date.now(),
+    likes: 0,
+    likedBy: []
+  };
+
+  saveComment(eventId, comment);
+  input.value = '';
+
+  const counter = document.getElementById('comment-char-count');
+  if (counter) {
+    counter.textContent = '200 left';
+    counter.style.color = '';
+  }
+
+  renderComments(eventId);
+
+  const btn = document.querySelector('.btn-post-comment');
+  if (btn) {
+    btn.textContent = 'Sent ✓';
+    btn.style.background = '#2E9E6B';
+    setTimeout(() => {
+      btn.textContent = 'Send 🔥';
+      btn.style.background = '';
+    }, 1500);
+  }
+}
+
+// -- POST AN ORGANISER UPDATE ---------------------------------------------
+function postOrgUpdate() {
+  const input = document.getElementById('update-input');
+  if (!input) {
+    return;
+  }
+
+  const text = input.value.trim();
+  if (text.length === 0) {
+    shakeElement(input);
+    return;
+  }
+  if (text.length > 280) {
+    return;
+  }
+
+  const eventId = document.getElementById('screen-event-detail')?.getAttribute('data-event-id');
+  const event = eventId ? getEventById(eventId) : null;
+  if (!eventId || !event || !userIsOrganiser(event)) {
+    return;
+  }
+
+  let type = 'info';
+  const lower = text.toLowerCase();
+  if (lower.includes('cancel') || lower.includes('postpone') || lower.includes('change') || lower.includes('moved')) {
+    type = 'warning';
+  } else if (lower.includes('excited') || lower.includes('surprise') || lower.includes('added') || lower.includes('bonus') || lower.includes('confirmed') || lower.includes('🎉')) {
+    type = 'exciting';
+  }
+
+  const update = {
+    id: 'upd_' + Date.now(),
+    eventId,
+    text,
+    timestamp: Date.now(),
+    type
+  };
+
+  saveUpdate(eventId, update);
+  input.value = '';
+
+  const counter = document.getElementById('update-char-count');
+  if (counter) {
+    counter.textContent = '280 left';
+    counter.style.color = '';
+  }
+
+  renderUpdates(eventId);
+
+  const btn = document.querySelector('.btn-post-update');
+  if (btn) {
+    btn.textContent = 'Posted ✓';
+    btn.style.background = '#2E9E6B';
+    setTimeout(() => {
+      btn.textContent = '📣 Post Update';
+      btn.style.background = '';
+    }, 1800);
+  }
+}
+
+// -- LIKE A COMMENT --------------------------------------------------------
+function handleLike(eventId, commentId) {
+  const profile = getUserProfile();
+  if (!profile || !profile.name) {
+    return;
+  }
+
+  const newLikes = toggleLike(eventId, commentId);
+  if (newLikes === undefined) {
+    return;
+  }
+
+  const commentEl = document.querySelector('[data-comment-id="' + commentId + '"]');
+  if (!commentEl) {
+    return;
+  }
+
+  const likeBtn = commentEl.querySelector('.like-btn');
+  const comment = getComments(eventId).find((item) => item.id === commentId);
+  if (!likeBtn || !comment) {
+    return;
+  }
+
+  const hasLiked = Array.isArray(comment.likedBy) && comment.likedBy.indexOf(profile.name) !== -1;
+  likeBtn.className = 'like-btn' + (hasLiked ? ' liked' : '');
+  likeBtn.innerHTML = `${hasLiked ? '❤️' : '🤍'} <span class="like-count">${newLikes}</span>`;
+
+  likeBtn.style.transform = 'scale(1.3)';
+  setTimeout(() => {
+    likeBtn.style.transform = 'scale(1)';
+  }, 200);
+}
+
+// -- UTILITY ---------------------------------------------------------------
+function formatTimeAgo(timestamp) {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) {
+    return 'just now';
+  }
+  if (seconds < 3600) {
+    return Math.floor(seconds / 60) + 'm ago';
+  }
+  if (seconds < 86400) {
+    return Math.floor(seconds / 3600) + 'h ago';
+  }
+  return Math.floor(seconds / 86400) + 'd ago';
+}
+
+function setupCharCount(inputId, counterId, maxLength) {
+  const input = document.getElementById(inputId);
+  const counter = document.getElementById(counterId);
+  if (!input || !counter) {
+    return;
+  }
+
+  const updateCount = () => {
+    const remaining = maxLength - input.value.length;
+    counter.textContent = remaining + ' left';
+    counter.style.color = remaining < 20 ? '#F4500A' : '';
+  };
+
+  input.oninput = updateCount;
+  updateCount();
+}
+
+function shakeElement(element) {
+  element.style.animation = 'shake 0.3s ease';
+  setTimeout(() => {
+    element.style.animation = '';
+  }, 300);
 }
 
 function openRegistration(eventId) {
@@ -1107,9 +1456,9 @@ function bindGlobalEvents() {
   }
 }
 
-function initializeLandingState() {
-  const onboardingDone = getOnboardingComplete();
-  if (!onboardingDone) {
+function initializeLandingState(onboardingDone) {
+  const isOnboardingDone = typeof onboardingDone === 'boolean' ? onboardingDone : getOnboardingComplete();
+  if (!isOnboardingDone) {
     renderOnboarding();
     showScreen('screen-onboarding');
     return;
@@ -1131,7 +1480,9 @@ function initializeLandingState() {
 
 function initApp() {
   bindGlobalEvents();
-  initializeLandingState();
+  const onboardingDone = getOnboardingComplete();
+  seedMockComments();
+  initializeLandingState(onboardingDone);
   const searchInput = qs('#discover-search');
   if (searchInput) {
     searchInput.value = TOKA_APP_STATE.discoverQuery;
@@ -1186,3 +1537,6 @@ window.goOnboardingBack = goOnboardingBack;
 window.toggleOnboardingInterest = toggleOnboardingInterest;
 window.renderHostPreview = renderHostPreview;
 window.togglePaymentNumberInput = togglePaymentNumberInput;
+window.postComment = postComment;
+window.postOrgUpdate = postOrgUpdate;
+window.handleLike = handleLike;

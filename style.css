@@ -1175,3 +1175,400 @@ textarea {
         min-height: 220px;
     }
 }
+
+/* ======================================================
+   TOKA - EVENT ENGAGEMENT (Comments + Updates)
+   Append to bottom of style.css
+====================================================== */
+
+/* -- SECTION WRAPPER ----------------------------------- */
+.event-section {
+    padding: 20px 16px 0;
+    max-width: 660px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.section-icon {
+    font-size: 1.1rem;
+}
+
+.section-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+    letter-spacing: 0.02em;
+}
+
+.comment-count {
+    background: rgba(244, 80, 10, 0.15);
+    color: var(--toka-orange);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+    border: 1px solid rgba(244, 80, 10, 0.2);
+}
+
+.section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(244, 80, 10, 0.15), transparent);
+    margin: 24px 16px;
+    max-width: 628px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* -- ORGANISER UPDATES --------------------------------- */
+.updates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.update-card {
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    border-left: 3px solid;
+    animation: fadeUp 0.3s ease both;
+}
+
+.update-info {
+    background: rgba(58, 123, 213, 0.08);
+    border-color: #3A7BD5;
+}
+
+.update-warning {
+    background: rgba(244, 80, 10, 0.08);
+    border-color: var(--toka-orange);
+}
+
+.update-exciting {
+    background: rgba(198, 241, 53, 0.08);
+    border-color: var(--toka-lime);
+}
+
+.update-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.update-icon {
+    font-size: 0.9rem;
+}
+
+.update-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    flex: 1;
+}
+
+.update-time {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.update-text {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+/* -- EMPTY STATES -------------------------------------- */
+.empty-updates,
+.empty-comments {
+    text-align: center;
+    padding: 20px 16px;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.empty-sub {
+    font-size: 0.78rem;
+    margin-top: 4px;
+    opacity: 0.7;
+}
+
+/* -- COMMENTS LIST ------------------------------------- */
+.comments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-raised) transparent;
+}
+
+.comment-item {
+    display: flex;
+    gap: 10px;
+    animation: fadeUp 0.25s ease both;
+}
+
+.comment-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--toka-black);
+    flex-shrink: 0;
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.comment-body {
+    flex: 1;
+    background: var(--surface);
+    border-radius: 0 var(--radius) var(--radius) var(--radius);
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.own-comment .comment-body {
+    background: rgba(244, 80, 10, 0.08);
+    border-color: rgba(244, 80, 10, 0.15);
+    border-radius: var(--radius) 0 var(--radius) var(--radius);
+}
+
+/* Own comments align to the right */
+.own-comment {
+    flex-direction: row-reverse;
+}
+
+.own-comment .comment-body {
+    text-align: left;
+}
+
+.comment-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.comment-author {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.you-badge {
+    background: rgba(244, 80, 10, 0.2);
+    color: var(--toka-orange);
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.comment-time {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+.comment-text {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.comment-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.like-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    transition: transform 0.15s;
+}
+
+.like-btn.liked {
+    color: var(--toka-orange);
+}
+
+.like-btn:active {
+    transform: scale(0.9);
+}
+
+/* -- COMMENT COMPOSER ---------------------------------- */
+.comment-composer {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.commenter-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--toka-black);
+    flex-shrink: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--toka-orange);
+}
+
+.composer-right {
+    flex: 1;
+}
+
+/* -- SHARED TEXTAREA ----------------------------------- */
+.toka-textarea {
+    width: 100%;
+    background: var(--surface-raised);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    padding: 12px 14px;
+    resize: none;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    line-height: 1.5;
+}
+
+.toka-textarea:focus {
+    border-color: var(--toka-orange);
+    box-shadow: 0 0 0 3px rgba(244, 80, 10, 0.12);
+}
+
+.toka-textarea::placeholder {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+/* -- FORM FOOTER --------------------------------------- */
+.form-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+}
+
+.char-count {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* -- ACTION BUTTONS ------------------------------------ */
+.btn-post-comment,
+.btn-post-update {
+    background: var(--toka-orange);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, background 0.2s, box-shadow 0.15s;
+    letter-spacing: 0.02em;
+}
+
+.btn-post-comment:hover,
+.btn-post-update:hover {
+    box-shadow: 0 4px 16px rgba(244, 80, 10, 0.35);
+    transform: translateY(-1px);
+}
+
+.btn-post-comment:active,
+.btn-post-update:active {
+    transform: scale(0.96);
+}
+
+/* -- NO TICKET PROMPT ---------------------------------- */
+.no-ticket-prompt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.no-ticket-prompt span {
+    font-size: 1.2rem;
+}
+
+.no-ticket-prompt p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* -- POST UPDATE FORM ---------------------------------- */
+.post-update-form {
+    background: rgba(244, 80, 10, 0.05);
+    border: 1px solid rgba(244, 80, 10, 0.2);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-top: 12px;
+}
+
+/* -- SHAKE ANIMATION (validation) ---------------------- */
+@keyframes shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    20% {
+        transform: translateX(-6px);
+    }
+
+    40% {
+        transform: translateX(6px);
+    }
+
+    60% {
+        transform: translateX(-4px);
+    }
+
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+/* -- MOBILE PADDING (space above bottom nav) ----------- */
+#comments-section {
+    padding-bottom: 100px;
+}
