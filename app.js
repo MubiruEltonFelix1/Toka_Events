@@ -23,7 +23,7 @@ const TOKA_APP_STATE = {
     lastPublishedAt: 0
 };
 
-  const TOKA_HOST_PUBLISH_DUPLICATE_WINDOW_MS = 12000;
+const TOKA_HOST_PUBLISH_DUPLICATE_WINDOW_MS = 12000;
 
 const TOKA_AVATAR_COLORS = ['#F4500A', '#F7B731', '#C6F135', '#2E2E2E', '#7B3F00', '#D16B34', '#AA4C1D', '#5C3B1E'];
 
@@ -64,6 +64,22 @@ function hashString(value) {
 
 function getAvatarColor(name) {
     return TOKA_AVATAR_COLORS[hashString(String(name || 'Toka')) % TOKA_AVATAR_COLORS.length];
+}
+
+const TOKA_EVENT_THUMBNAILS = {
+    Music: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=80',
+    Sports: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80',
+    Business: 'https://images.unsplash.com/photo-1515187029135-18ee286d815b?auto=format&fit=crop&w=1200&q=80',
+    Art: 'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&w=1200&q=80',
+    Faith: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=1200&q=80',
+    'Food & Drinks': 'https://images.unsplash.com/photo-1498654896293-37aacf113fd9?auto=format&fit=crop&w=1200&q=80',
+    Tech: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
+    Campus: 'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?auto=format&fit=crop&w=1200&q=80',
+    Community: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1200&q=80'
+};
+
+function getDefaultEventThumbnail(event) {
+    return TOKA_EVENT_THUMBNAILS[event && event.category] || TOKA_EVENT_THUMBNAILS.Community;
 }
 
 function formatPrice(price, currency) {
@@ -114,7 +130,11 @@ function recordEventCardImpression(eventId, context = 'feed') {
 }
 
 function getEventThumbnail(event) {
-    return event && event.thumbnailDataUrl ? event.thumbnailDataUrl : '';
+    if (!event) {
+        return '';
+    }
+
+  return event.thumbnailDataUrl || event.thumbnailUrl || getDefaultEventThumbnail(event);
 }
 
 function getUpcomingEvents(count = 3) {
@@ -313,15 +333,13 @@ function renderEventCards(events, container, options = {}) {
 
     container.innerHTML = events.map((event) => {
         const thumbnail = getEventThumbnail(event);
-        const thumbnailMarkup = thumbnail ? `<img class="event-cover-image" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} thumbnail" />` : '';
         const savedEntry = getCalendarSavedEntry(event.id);
         const calendarIndicator = savedEntry ? `<span class="event-cal-indicator ${savedEntry.withTicket ? 'with-ticket' : 'without-ticket'}" title="Saved to calendar">${savedEntry.withTicket ? '🎫 Saved' : '○ Saved'}</span>` : '';
         recordEventCardImpression(event.id, options.impressionContext || 'event-grid');
         return `
       <article class="event-card" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
         <div class="event-cover">
-          ${thumbnailMarkup}
-          <div class="event-emoji ${thumbnail ? 'is-thumb' : ''}">${escapeHtml(event.emoji || '🎫')}</div>
+          <img class="event-cover-image" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} cover image" loading="lazy" decoding="async" />
           <div class="event-cover-overlay"></div>
         </div>
         <div class="event-card-body">
@@ -382,7 +400,7 @@ function renderTrendingRow(containerId) {
                 return `
       <article class="trending-card" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
         <div class="trending-thumb-wrap">
-          ${thumbnail ? `<img class="trending-thumb" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} thumbnail" />` : `<div class="trending-thumb-fallback">${escapeHtml(event.emoji || '🎫')}</div>`}
+          <img class="trending-thumb" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} cover image" loading="lazy" decoding="async" />
           <span class="badge trending-badge">🔥 Trending</span>
         </div>
         <div class="trending-body">
@@ -438,13 +456,14 @@ function renderDetailScreen(event) {
     const priceLine = qs('#detail-price-line');
 
     if (cover) {
-      cover.style.setProperty('--card-gradient', event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)');
-      const detailThumbnail = getEventThumbnail(event);
-      cover.style.backgroundImage = detailThumbnail ? `linear-gradient(135deg, rgba(46,46,46,0.32), rgba(244,80,10,0.35)), url('${detailThumbnail}')` : '';
-      cover.style.backgroundSize = detailThumbnail ? 'cover' : '';
-      cover.style.backgroundPosition = detailThumbnail ? 'center' : '';
+        cover.style.setProperty('--card-gradient', event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)');
+        const detailThumbnail = getEventThumbnail(event);
+        cover.style.backgroundImage = detailThumbnail ? `linear-gradient(135deg, rgba(46,46,46,0.32), rgba(244,80,10,0.35)), url('${detailThumbnail}')` : '';
+        cover.style.backgroundSize = detailThumbnail ? 'cover' : '';
+        cover.style.backgroundPosition = detailThumbnail ? 'center' : '';
+        cover.style.backgroundRepeat = 'no-repeat';
         cover.querySelector('.detail-hero-emoji').textContent = event.emoji || '🎫';
-      cover.querySelector('.detail-hero-emoji').classList.toggle('is-thumb', Boolean(detailThumbnail));
+        cover.querySelector('.detail-hero-emoji').classList.toggle('is-thumb', Boolean(detailThumbnail));
     }
     if (title) title.textContent = event.name;
     if (organiser) organiser.innerHTML = `<span class="avatar initials" style="background:${getAvatarColor(event.organiser)}">${escapeHtml(getInitials(event.organiser))}</span><span>${escapeHtml(event.organiser)}</span>`;
@@ -1397,8 +1416,7 @@ function renderHostPreview() {
   preview.innerHTML = `
     <article class="event-card preview-card" style="--card-gradient: ${getGradientForCategory(data.category)}">
       <div class="event-cover">
-        ${data.thumbnailDataUrl ? `<img class="event-cover-image" src="${escapeHtml(data.thumbnailDataUrl)}" alt="Event thumbnail preview" />` : ''}
-        <div class="event-emoji">${escapeHtml(getEmojiForCategory(data.category))}</div>
+        <img class="event-cover-image" src="${escapeHtml(getEventThumbnail(data))}" alt="Event thumbnail preview" loading="lazy" decoding="async" />
         <div class="event-cover-overlay"></div>
       </div>
       <div class="event-card-body">
