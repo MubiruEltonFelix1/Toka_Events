@@ -5,8 +5,24 @@ const TOKA_STORAGE_KEYS = {
     userProfile: 'toka_user_profile',
     tickets: 'toka_tickets',
     events: 'toka_events',
-    referralCode: 'toka_referral_code'
+    referralCode: 'toka_referral_code',
+    calendarEntries: 'toka_calendar_entries',
+    eventMetrics: 'toka_event_metrics'
 };
+
+const TOKA_PUBLIC_HOLIDAYS = [
+    { id: 'hol-2026-01-01', date: '2026-01-01', name: "New Year's Day", scope: 'National' },
+    { id: 'hol-2026-01-26', date: '2026-01-26', name: 'NRM Liberation Day', scope: 'National' },
+    { id: 'hol-2026-03-08', date: '2026-03-08', name: "International Women's Day", scope: 'National' },
+    { id: 'hol-2026-04-03', date: '2026-04-03', name: 'Good Friday', scope: 'National' },
+    { id: 'hol-2026-04-06', date: '2026-04-06', name: 'Easter Monday', scope: 'National' },
+    { id: 'hol-2026-05-01', date: '2026-05-01', name: 'Labour Day', scope: 'National' },
+    { id: 'hol-2026-06-03', date: '2026-06-03', name: "Martyrs' Day", scope: 'National' },
+    { id: 'hol-2026-06-09', date: '2026-06-09', name: 'National Heroes Day', scope: 'National' },
+    { id: 'hol-2026-10-09', date: '2026-10-09', name: 'Independence Day', scope: 'National' },
+    { id: 'hol-2026-12-25', date: '2026-12-25', name: 'Christmas Day', scope: 'National' },
+    { id: 'hol-2026-12-26', date: '2026-12-26', name: 'Boxing Day', scope: 'National' }
+];
 
 const TOKA_CATEGORY_OPTIONS = [
     'Music',
@@ -485,4 +501,91 @@ function seedMockComments() {
     }
 
     localStorage.setItem('toka_comments_seeded', 'true');
+}
+
+function getPublicHolidays() {
+    return TOKA_PUBLIC_HOLIDAYS.slice();
+}
+
+function getCalendarEntries() {
+    return readStorage(TOKA_STORAGE_KEYS.calendarEntries, []);
+}
+
+function saveCalendarEntry(entry) {
+    const entries = getCalendarEntries();
+    const existingIndex = entries.findIndex((item) => item.eventId === entry.eventId);
+    const nextEntry = {
+        eventId: entry.eventId,
+        savedAt: entry.savedAt || new Date().toISOString(),
+        withTicket: Boolean(entry.withTicket)
+    };
+
+    if (existingIndex >= 0) {
+        entries[existingIndex] = {
+            ...entries[existingIndex],
+            ...nextEntry,
+            withTicket: entries[existingIndex].withTicket || nextEntry.withTicket
+        };
+    } else {
+        entries.unshift(nextEntry);
+    }
+
+    writeStorage(TOKA_STORAGE_KEYS.calendarEntries, entries);
+    return nextEntry;
+}
+
+function getEventMetrics() {
+    return readStorage(TOKA_STORAGE_KEYS.eventMetrics, {});
+}
+
+function saveEventMetrics(metrics) {
+    writeStorage(TOKA_STORAGE_KEYS.eventMetrics, metrics || {});
+}
+
+function getEventMetric(eventId) {
+    const metrics = getEventMetrics();
+    return metrics[eventId] || {
+        impressions: 0,
+        ticketSalesCount: 0,
+        ticketRevenueTotal: 0,
+        ticketSalesHistory: [],
+        calendarAddsWithTicket: 0,
+        calendarAddsWithoutTicket: 0
+    };
+}
+
+function incrementEventImpression(eventId) {
+    const metrics = getEventMetrics();
+    const current = getEventMetric(eventId);
+    metrics[eventId] = {
+        ...current,
+        impressions: Number(current.impressions || 0) + 1
+    };
+    saveEventMetrics(metrics);
+}
+
+function recordTicketSaleMetric(eventId, amount, timestamp) {
+    const metrics = getEventMetrics();
+    const current = getEventMetric(eventId);
+    metrics[eventId] = {
+        ...current,
+        ticketSalesCount: Number(current.ticketSalesCount || 0) + 1,
+        ticketRevenueTotal: Number(current.ticketRevenueTotal || 0) + Number(amount || 0),
+        ticketSalesHistory: [
+            ...(Array.isArray(current.ticketSalesHistory) ? current.ticketSalesHistory : []),
+            { timestamp: timestamp || new Date().toISOString(), amount: Number(amount || 0) }
+        ]
+    };
+    saveEventMetrics(metrics);
+}
+
+function recordCalendarAddMetric(eventId, withTicket) {
+    const metrics = getEventMetrics();
+    const current = getEventMetric(eventId);
+    metrics[eventId] = {
+        ...current,
+        calendarAddsWithTicket: Number(current.calendarAddsWithTicket || 0) + (withTicket ? 1 : 0),
+        calendarAddsWithoutTicket: Number(current.calendarAddsWithoutTicket || 0) + (withTicket ? 0 : 1)
+    };
+    saveEventMetrics(metrics);
 }

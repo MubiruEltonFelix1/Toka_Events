@@ -12,7 +12,12 @@ const TOKA_APP_STATE = {
     onboardingTouchStartX: 0,
     hostStep: 1,
     hostSubmitted: false,
-    ticketToastTimer: null
+    ticketToastTimer: null,
+    calendarMonth: new Date().getMonth(),
+    calendarYear: new Date().getFullYear(),
+    hostThumbnailDataUrl: '',
+    recordedImpressions: {},
+    hostChartInstances: {}
 };
 
 const TOKA_AVATAR_COLORS = ['#F4500A', '#F7B731', '#C6F135', '#2E2E2E', '#7B3F00', '#D16B34', '#AA4C1D', '#5C3B1E'];
@@ -81,6 +86,32 @@ function getEventById(eventId) {
     return getEvents().find((event) => event.id === eventId) || null;
 }
 
+function isLoggedInUser() {
+  const profile = getUserProfile();
+  return Boolean(getOnboardingComplete() && profile && profile.name && profile.phone);
+}
+
+function getCalendarSavedEntry(eventId) {
+  return getCalendarEntries().find((entry) => entry.eventId === eventId) || null;
+}
+
+function hasTicketForEvent(eventId) {
+  return getTickets().some((ticket) => ticket.eventId === eventId);
+}
+
+function recordEventCardImpression(eventId, context = 'feed') {
+  const key = `${context}:${eventId}`;
+  if (TOKA_APP_STATE.recordedImpressions[key]) {
+    return;
+  }
+  TOKA_APP_STATE.recordedImpressions[key] = true;
+  incrementEventImpression(eventId);
+}
+
+function getEventThumbnail(event) {
+  return event && event.thumbnailDataUrl ? event.thumbnailDataUrl : '';
+}
+
 function getUpcomingEvents(count = 3) {
     return getEvents().slice(0, count);
 }
@@ -121,6 +152,8 @@ function showScreen(screenId) {
         updateBottomNavActive(screenId);
     }
 
+    syncHashWithScreen(screenId);
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (screenId === 'screen-home') {
@@ -138,7 +171,41 @@ function showScreen(screenId) {
     if (screenId === 'screen-host') {
         renderHostScreen();
     }
+    if (screenId === 'screen-calendar') {
+      renderCalendarScreen();
+    }
+    if (screenId === 'screen-host-dashboard') {
+      renderHostDashboard();
+    }
 }
+
+  function syncHashWithScreen(screenId) {
+    const mapping = {
+      'screen-home': '#/home',
+      'screen-discover': '#/discover',
+      'screen-calendar': '#/calendar',
+      'screen-my-tickets': '#/tickets',
+      'screen-profile': '#/profile',
+      'screen-host': '#/host',
+      'screen-host-dashboard': '#/host/dashboard'
+    };
+    const nextHash = mapping[screenId];
+    if (!nextHash || window.location.hash === nextHash) {
+      return;
+    }
+    window.location.hash = nextHash;
+  }
+
+  function resolveScreenFromHash() {
+    const hash = (window.location.hash || '').toLowerCase();
+    if (hash === '#/host/dashboard') return 'screen-host-dashboard';
+    if (hash === '#/calendar') return 'screen-calendar';
+    if (hash === '#/discover') return 'screen-discover';
+    if (hash === '#/tickets') return 'screen-my-tickets';
+    if (hash === '#/profile') return 'screen-profile';
+    if (hash === '#/host') return 'screen-host';
+    return 'screen-home';
+  }
 
 function setDiscoverFilters({ query = TOKA_APP_STATE.discoverQuery, category = TOKA_APP_STATE.discoverCategory, timeFilter = TOKA_APP_STATE.discoverTimeFilter } = {}) {
     TOKA_APP_STATE.discoverQuery = query;
@@ -240,11 +307,16 @@ function renderEventCards(events, container, options = {}) {
     }
 
     container.innerHTML = events.map((event) => {
-        const isFree = Number(event.price) === 0;
+        const thumbnail = getEventThumbnail(event);
+        const thumbnailMarkup = thumbnail ? `<img class="event-cover-image" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} thumbnail" />` : '';
+        const savedEntry = getCalendarSavedEntry(event.id);
+        const calendarIndicator = savedEntry ? `<span class="event-cal-indicator ${savedEntry.withTicket ? 'with-ticket' : 'without-ticket'}" title="Saved to calendar">${savedEntry.withTicket ? '🎫 Saved' : '○ Saved'}</span>` : '';
+        recordEventCardImpression(event.id, options.impressionContext || 'event-grid');
         return `
       <article class="event-card" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
         <div class="event-cover">
-          <div class="event-emoji">${escapeHtml(event.emoji || '🎫')}</div>
+          ${thumbnailMarkup}
+          <div class="event-emoji ${thumbnail ? 'is-thumb' : ''}">${escapeHtml(event.emoji || '🎫')}</div>
           <div class="event-cover-overlay"></div>
         </div>
         <div class="event-card-body">
@@ -256,7 +328,64 @@ function renderEventCards(events, container, options = {}) {
           <p class="event-meta">${escapeHtml(formatDateTime(event))}</p>
           <p class="event-meta">${escapeHtml(event.city)} · ${escapeHtml(event.venue)}</p>
           <div class="event-card-bottom">
-            <span class="event-capacity">${escapeHtml(String(event.registered || 0))} going</span>
+            <span class="event-capacity">${escapeHtml(String(event.registered || 0))} going ${calendarIndicator}</span>
+            <button type="button" class="button button-primary button-small" onclick="openEventDetail('${event.id}')">Get Ticket</button>
+          </div>
+        </div>
+      </article>
+    `;
+    }).join('');
+}
+
+function getTrendingEvents(limit = 8) {
+    const events = getEvents();
+    const now = Date.now();
+    const fortyEightHoursAgo = now - (48 * 60 * 60 * 1000);
+
+    return events
+        .map((event) => {
+            const metric = getEventMetric(event.id);
+            const history = Array.isArray(metric.ticketSalesHistory) ? metric.ticketSalesHistory : [];
+            const recentSales = history.filter((point) => new Date(point.timestamp).getTime() >= fortyEightHoursAgo).length;
+            const score =
+                (recentSales * 5) +
+                (Number(metric.ticketSalesCount || 0) * 3) +
+                (Number(metric.calendarAddsWithTicket || 0) * 2) +
+                Number(metric.calendarAddsWithoutTicket || 0) +
+                (Number(metric.impressions || 0) * 0.12);
+            return { ...event, trendingScore: score };
+        })
+        .sort((left, right) => right.trendingScore - left.trendingScore)
+        .slice(0, limit);
+}
+
+function renderTrendingRow(containerId) {
+    const container = qs(`#${containerId}`);
+    if (!container) {
+        return;
+    }
+
+    const trending = getTrendingEvents(10);
+    if (!trending.length) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = trending.map((event) => {
+        const thumbnail = getEventThumbnail(event);
+        recordEventCardImpression(event.id, containerId);
+        return `
+      <article class="trending-card" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
+        <div class="trending-thumb-wrap">
+          ${thumbnail ? `<img class="trending-thumb" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} thumbnail" />` : `<div class="trending-thumb-fallback">${escapeHtml(event.emoji || '🎫')}</div>`}
+          <span class="badge trending-badge">🔥 Trending</span>
+        </div>
+        <div class="trending-body">
+          <h4>${escapeHtml(event.name)}</h4>
+          <p class="event-meta">${escapeHtml(formatDate(event.date))}</p>
+          <p class="event-meta">${escapeHtml(event.city)} · ${escapeHtml(event.venue)}</p>
+          <div class="trending-bottom">
+            <strong>${escapeHtml(formatPrice(event.price, event.currency))}</strong>
             <button type="button" class="button button-primary button-small" onclick="openEventDetail('${event.id}')">Get Ticket</button>
           </div>
         </div>
@@ -269,7 +398,8 @@ function renderHome() {
     const categoryContainer = qs('#home-category-chips');
     const upcomingContainer = qs('#home-upcoming-grid');
     renderCategoryChips(categoryContainer, TOKA_APP_STATE.homeCategory, 'applyHomeCategory');
-    renderEventCards(getUpcomingEvents(3), upcomingContainer);
+    renderEventCards(getUpcomingEvents(3), upcomingContainer, { impressionContext: 'home-upcoming' });
+    renderTrendingRow('home-trending-row');
 }
 
 function renderDiscover() {
@@ -283,7 +413,8 @@ function renderDiscover() {
 
     renderTimeChips();
     renderCategoryChips(qs('#discover-category-chips'), TOKA_APP_STATE.discoverCategory, 'setDiscoverCategory');
-    renderEventCards(activeEvents, resultsContainer);
+    renderEventCards(activeEvents, resultsContainer, { impressionContext: 'discover-results' });
+    renderTrendingRow('discover-trending-row');
 }
 
 function renderDetailScreen(event) {
@@ -302,8 +433,13 @@ function renderDetailScreen(event) {
     const priceLine = qs('#detail-price-line');
 
     if (cover) {
-        cover.style.setProperty('--card-gradient', event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)');
+      cover.style.setProperty('--card-gradient', event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)');
+      const detailThumbnail = getEventThumbnail(event);
+      cover.style.backgroundImage = detailThumbnail ? `linear-gradient(135deg, rgba(46,46,46,0.32), rgba(244,80,10,0.35)), url('${detailThumbnail}')` : '';
+      cover.style.backgroundSize = detailThumbnail ? 'cover' : '';
+      cover.style.backgroundPosition = detailThumbnail ? 'center' : '';
         cover.querySelector('.detail-hero-emoji').textContent = event.emoji || '🎫';
+      cover.querySelector('.detail-hero-emoji').classList.toggle('is-thumb', Boolean(detailThumbnail));
     }
     if (title) title.textContent = event.name;
     if (organiser) organiser.innerHTML = `<span class="avatar initials" style="background:${getAvatarColor(event.organiser)}">${escapeHtml(getInitials(event.organiser))}</span><span>${escapeHtml(event.organiser)}</span>`;
@@ -318,6 +454,17 @@ function renderDetailScreen(event) {
     }
     if (ticketButton) {
         ticketButton.textContent = event.price > 0 ? `Get Ticket · ${formatPrice(event.price, event.currency)}` : 'Get Free Ticket';
+    }
+    const calendarButton = qs('#detail-calendar-button');
+    if (calendarButton) {
+      const savedEntry = getCalendarSavedEntry(event.id);
+      if (savedEntry && savedEntry.withTicket) {
+        calendarButton.textContent = 'Saved with Ticket ✓';
+      } else if (savedEntry) {
+        calendarButton.textContent = 'Saved to Calendar ✓';
+      } else {
+        calendarButton.textContent = 'Save to Calendar';
+      }
     }
     if (priceLine) {
         priceLine.textContent = `${event.price > 0 ? formatPrice(event.price, event.currency) : 'Free'} · General Admission`;
@@ -341,6 +488,7 @@ function openEventDetail(eventId) {
   }
 
   TOKA_APP_STATE.selectedEventId = eventId;
+  recordEventCardImpression(eventId, 'event-detail-open');
   renderDetailScreen(event);
 
   // Store event context for engagement actions.
@@ -352,6 +500,41 @@ function openEventDetail(eventId) {
   // Load comments and organiser updates before opening the detail screen.
   loadEventEngagement(eventId);
   showScreen('screen-event-detail');
+}
+
+function saveEventToCalendar(eventId, withTicket = false, showToastMessage = true) {
+  const event = getEventById(eventId);
+  if (!event) {
+    return;
+  }
+
+  const existing = getCalendarSavedEntry(eventId);
+  const nextWithTicket = Boolean(withTicket || hasTicketForEvent(eventId) || (existing && existing.withTicket));
+  saveCalendarEntry({ eventId, withTicket: nextWithTicket, savedAt: new Date().toISOString() });
+
+  if (!existing) {
+    recordCalendarAddMetric(eventId, nextWithTicket);
+  }
+
+  if (showToastMessage) {
+    toast(nextWithTicket ? 'Saved to calendar with ticket.' : 'Saved to calendar.');
+  }
+
+  if (TOKA_APP_STATE.currentScreen === 'screen-calendar') {
+    renderCalendarScreen();
+  }
+  renderHome();
+  renderDiscover();
+  if (TOKA_APP_STATE.selectedEventId === eventId) {
+    renderDetailScreen(event);
+  }
+}
+
+function saveSelectedEventToCalendar(withTicket) {
+  if (!TOKA_APP_STATE.selectedEventId) {
+    return;
+  }
+  saveEventToCalendar(TOKA_APP_STATE.selectedEventId, withTicket);
 }
 
 // -- MAIN LOADER ----------------------------------------------------------
@@ -858,6 +1041,8 @@ function submitRegistration(event) {
   };
 
   saveTicket(ticket);
+  recordTicketSaleMetric(event.id, event.price, ticket.createdAt);
+  saveEventToCalendar(event.id, true, false);
 
   const updatedEvent = {
     ...event,
@@ -1133,6 +1318,7 @@ function renderHostScreen() {
     publishButton.classList.toggle('hidden', TOKA_APP_STATE.hostStep !== 3);
   }
   renderHostPreview();
+  renderHostThumbnailPreview();
 }
 
 function getHostFormData() {
@@ -1147,7 +1333,8 @@ function getHostFormData() {
     free: qs('#host-free')?.checked || false,
     price: Number(qs('#host-price')?.value || 0),
     capacity: Number(qs('#host-capacity')?.value || 0),
-    description: qs('#host-description')?.value.trim() || ''
+    description: qs('#host-description')?.value.trim() || '',
+    thumbnailDataUrl: TOKA_APP_STATE.hostThumbnailDataUrl || ''
   };
 }
 
@@ -1160,6 +1347,7 @@ function renderHostPreview() {
   preview.innerHTML = `
     <article class="event-card preview-card" style="--card-gradient: ${getGradientForCategory(data.category)}">
       <div class="event-cover">
+        ${data.thumbnailDataUrl ? `<img class="event-cover-image" src="${escapeHtml(data.thumbnailDataUrl)}" alt="Event thumbnail preview" />` : ''}
         <div class="event-emoji">${escapeHtml(getEmojiForCategory(data.category))}</div>
         <div class="event-cover-overlay"></div>
       </div>
@@ -1256,7 +1444,8 @@ function publishEvent() {
     organiser: profile.name || 'You',
     tags: [formData.category.toLowerCase()],
     attendees: profile.name ? [profile.name] : [],
-    createdBy: 'user'
+    createdBy: 'user',
+    thumbnailDataUrl: formData.thumbnailDataUrl || ''
   };
 
   saveEvent(createdEvent);
@@ -1275,8 +1464,330 @@ function publishEvent() {
   TOKA_APP_STATE.hostSubmitted = true;
   renderHome();
   renderDiscover();
+  renderCalendarScreen();
   renderProfile();
   toast('Event published.');
+}
+
+function renderHostThumbnailPreview() {
+  const preview = qs('#host-thumbnail-preview');
+  if (!preview) {
+    return;
+  }
+
+  if (!TOKA_APP_STATE.hostThumbnailDataUrl) {
+    preview.classList.add('hidden');
+    preview.innerHTML = '';
+    return;
+  }
+
+  preview.classList.remove('hidden');
+  preview.innerHTML = `
+    <img src="${escapeHtml(TOKA_APP_STATE.hostThumbnailDataUrl)}" alt="Selected event thumbnail" />
+    <button type="button" class="button button-ghost button-small" onclick="clearHostThumbnail()">Remove</button>
+  `;
+}
+
+function handleHostThumbnailFile(file) {
+  if (!file || !String(file.type || '').startsWith('image/')) {
+    toast('Please choose an image file.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    TOKA_APP_STATE.hostThumbnailDataUrl = String(reader.result || '');
+    renderHostThumbnailPreview();
+    renderHostPreview();
+  };
+  reader.onerror = () => toast('Could not read image file.');
+  reader.readAsDataURL(file);
+}
+
+function clearHostThumbnail() {
+  TOKA_APP_STATE.hostThumbnailDataUrl = '';
+  const input = qs('#host-thumbnail-input');
+  if (input) {
+    input.value = '';
+  }
+  renderHostThumbnailPreview();
+  renderHostPreview();
+}
+
+function openHostDashboard() {
+  showScreen('screen-host-dashboard');
+}
+
+function getHostedEvents() {
+  const allEvents = getEvents();
+  return allEvents.filter((event) => userIsOrganiser(event));
+}
+
+function getRevenueSeries(eventId, points = 7) {
+  const metric = getEventMetric(eventId);
+  const history = Array.isArray(metric.ticketSalesHistory) ? metric.ticketSalesHistory : [];
+  const dayBuckets = [];
+  const dayMs = 24 * 60 * 60 * 1000;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let index = points - 1; index >= 0; index -= 1) {
+    const day = new Date(today.getTime() - (index * dayMs));
+    const key = day.toISOString().slice(0, 10);
+    dayBuckets.push({ key, label: day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), revenue: 0 });
+  }
+
+  history.forEach((entry) => {
+    const dayKey = new Date(entry.timestamp).toISOString().slice(0, 10);
+    const bucket = dayBuckets.find((item) => item.key === dayKey);
+    if (bucket) {
+      bucket.revenue += Number(entry.amount || 0);
+    }
+  });
+
+  return dayBuckets;
+}
+
+function renderHostDashboard() {
+  const guard = qs('#host-dashboard-guard');
+  const content = qs('#host-dashboard-content');
+  if (!guard || !content) {
+    return;
+  }
+
+  const hosted = getHostedEvents();
+  if (!hosted.length) {
+    guard.classList.remove('hidden');
+    content.innerHTML = '';
+    return;
+  }
+
+  guard.classList.add('hidden');
+  content.innerHTML = hosted.map((event) => {
+    const metric = getEventMetric(event.id);
+    const impressions = Number(metric.impressions || 0);
+    const sold = Number(metric.ticketSalesCount || 0);
+    const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(1) : '0.0';
+    const entries = getCalendarEntries().filter((entry) => entry.eventId === event.id);
+    const withTicket = entries.filter((entry) => entry.withTicket).length;
+    const withoutTicket = entries.filter((entry) => !entry.withTicket).length;
+    const thumb = getEventThumbnail(event);
+
+    return `
+      <article class="dashboard-card card">
+        <div class="dashboard-top">
+          ${thumb ? `<img class="dashboard-thumb" src="${escapeHtml(thumb)}" alt="${escapeHtml(event.name)} thumbnail" />` : `<div class="dashboard-thumb-fallback">${escapeHtml(event.emoji || '🎫')}</div>`}
+          <div>
+            <h3>${escapeHtml(event.name)}</h3>
+            <p class="text-muted">${escapeHtml(event.city)} · ${escapeHtml(formatDate(event.date))}</p>
+          </div>
+        </div>
+        <div class="dashboard-metrics">
+          <div class="stat-card"><strong>${formatPrice(metric.ticketRevenueTotal || 0, event.currency || 'UGX')}</strong><span>Total Revenue</span></div>
+          <div class="stat-card"><strong>${sold}</strong><span>Tickets Sold (General)</span></div>
+          <div class="stat-card"><strong>${withTicket} / ${withoutTicket}</strong><span>Calendar Adds (With/Without Ticket)</span></div>
+          <div class="stat-card"><strong>${impressions}</strong><span>Impressions</span></div>
+          <div class="stat-card"><strong>${conversion}%</strong><span>Conversion Rate</span></div>
+        </div>
+        <div class="dashboard-chart-wrap">
+          <canvas id="host-chart-${escapeHtml(event.id)}" height="120"></canvas>
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  Object.values(TOKA_APP_STATE.hostChartInstances).forEach((chart) => {
+    if (chart && typeof chart.destroy === 'function') {
+      chart.destroy();
+    }
+  });
+  TOKA_APP_STATE.hostChartInstances = {};
+
+  hosted.forEach((event) => {
+    const ctx = qs(`#host-chart-${event.id}`);
+    if (!ctx || typeof Chart === 'undefined') {
+      return;
+    }
+    const series = getRevenueSeries(event.id, 7);
+    TOKA_APP_STATE.hostChartInstances[event.id] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: series.map((point) => point.label),
+        datasets: [{
+          label: 'Revenue',
+          data: series.map((point) => point.revenue),
+          borderColor: '#F4500A',
+          backgroundColor: 'rgba(244, 80, 10, 0.16)',
+          fill: true,
+          tension: 0.35
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            ticks: {
+              color: '#888888'
+            },
+            grid: {
+              color: 'rgba(255,255,255,0.08)'
+            }
+          },
+          x: {
+            ticks: {
+              color: '#888888'
+            },
+            grid: {
+              color: 'rgba(255,255,255,0.06)'
+            }
+          }
+        }
+      }
+    });
+  });
+}
+
+function getCalendarDayPayload(year, month, day) {
+  const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const holidays = getPublicHolidays().filter((holiday) => holiday.date === dateString);
+  const entries = getCalendarEntries();
+  const events = entries
+    .map((entry) => ({ ...entry, event: getEventById(entry.eventId) }))
+    .filter((entry) => entry.event && entry.event.date === dateString);
+
+  return { dateString, holidays, events };
+}
+
+function renderCalendarScreen() {
+  const authGuard = qs('#calendar-auth-guard');
+  const shell = qs('#calendar-shell');
+  const monthLabel = qs('#calendar-month-label');
+  const weekdays = qs('#calendar-weekdays');
+  const grid = qs('#calendar-grid');
+
+  if (!authGuard || !shell || !monthLabel || !weekdays || !grid) {
+    return;
+  }
+
+  const isLoggedIn = isLoggedInUser();
+  authGuard.classList.toggle('hidden', isLoggedIn);
+  shell.classList.toggle('hidden', !isLoggedIn);
+  if (!isLoggedIn) {
+    return;
+  }
+
+  monthLabel.textContent = new Date(TOKA_APP_STATE.calendarYear, TOKA_APP_STATE.calendarMonth, 1).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric'
+  });
+
+  weekdays.innerHTML = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((name) => `<span>${name}</span>`).join('');
+
+  const firstDayIndex = new Date(TOKA_APP_STATE.calendarYear, TOKA_APP_STATE.calendarMonth, 1).getDay();
+  const daysInMonth = new Date(TOKA_APP_STATE.calendarYear, TOKA_APP_STATE.calendarMonth + 1, 0).getDate();
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const cells = [];
+
+  for (let index = 0; index < firstDayIndex; index += 1) {
+    cells.push('<div class="calendar-day empty"></div>');
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const payload = getCalendarDayPayload(TOKA_APP_STATE.calendarYear, TOKA_APP_STATE.calendarMonth, day);
+    const isToday = payload.dateString === todayIso;
+    const holidayMarkers = payload.holidays.map((holiday) => `
+      <button type="button" class="calendar-marker holiday" onclick="openCalendarEventModal('${holiday.id}', 'holiday')">${escapeHtml(holiday.name)}</button>
+    `).join('');
+    const eventMarkers = payload.events.map((entry) => `
+      <button type="button" class="calendar-marker ${entry.withTicket ? 'ticket' : 'ghost'}" onclick="openCalendarEventModal('${entry.eventId}', 'event')">
+        ${entry.withTicket ? '🎫' : '○'} ${escapeHtml(entry.event.name)}
+      </button>
+    `).join('');
+
+    cells.push(`
+      <div class="calendar-day ${isToday ? 'today' : ''}">
+        <div class="calendar-day-number">${day}</div>
+        <div class="calendar-day-events">${holidayMarkers}${eventMarkers}</div>
+      </div>
+    `);
+  }
+
+  grid.innerHTML = cells.join('');
+}
+
+function changeCalendarMonth(offset) {
+  TOKA_APP_STATE.calendarMonth += Number(offset || 0);
+  if (TOKA_APP_STATE.calendarMonth < 0) {
+    TOKA_APP_STATE.calendarMonth = 11;
+    TOKA_APP_STATE.calendarYear -= 1;
+  }
+  if (TOKA_APP_STATE.calendarMonth > 11) {
+    TOKA_APP_STATE.calendarMonth = 0;
+    TOKA_APP_STATE.calendarYear += 1;
+  }
+  renderCalendarScreen();
+}
+
+function goToTodayCalendarMonth() {
+  const now = new Date();
+  TOKA_APP_STATE.calendarMonth = now.getMonth();
+  TOKA_APP_STATE.calendarYear = now.getFullYear();
+  renderCalendarScreen();
+}
+
+function openCalendarEventModal(refId, type) {
+  const modal = qs('#calendar-event-modal');
+  const content = qs('#calendar-modal-content');
+  if (!modal || !content) {
+    return;
+  }
+
+  if (type === 'holiday') {
+    const holiday = getPublicHolidays().find((item) => item.id === refId);
+    if (!holiday) {
+      return;
+    }
+    content.innerHTML = `
+      <p class="eyebrow">Public Holiday</p>
+      <h3>${escapeHtml(holiday.name)}</h3>
+      <p class="text-muted">${escapeHtml(formatDate(holiday.date))}</p>
+      <p class="text-muted">Scope: ${escapeHtml(holiday.scope || 'National')}</p>
+    `;
+  } else {
+    const event = getEventById(refId);
+    if (!event) {
+      return;
+    }
+    const savedEntry = getCalendarSavedEntry(event.id);
+    const thumb = getEventThumbnail(event);
+    content.innerHTML = `
+      ${thumb ? `<img class="calendar-modal-thumb" src="${escapeHtml(thumb)}" alt="${escapeHtml(event.name)} thumbnail" />` : ''}
+      <span class="badge">${savedEntry && savedEntry.withTicket ? 'Saved with Ticket' : 'Saved (No Ticket)'}</span>
+      <h3>${escapeHtml(event.name)}</h3>
+      <p class="text-muted">${escapeHtml(formatDateTime(event))}</p>
+      <p class="text-muted">${escapeHtml(event.city)} · ${escapeHtml(event.venue)}</p>
+      <div class="calendar-modal-actions">
+        <button type="button" class="button button-secondary" onclick="openEventDetail('${event.id}'); closeCalendarEventModal();">View Details</button>
+        <button type="button" class="button button-primary" onclick="openRegistration('${event.id}'); closeCalendarEventModal();">Get Ticket</button>
+      </div>
+    `;
+  }
+
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeCalendarEventModal() {
+  const modal = qs('#calendar-event-modal');
+  if (!modal) {
+    return;
+  }
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
 }
 
 function startOnboarding() {
@@ -1411,6 +1922,33 @@ function bindGlobalEvents() {
     });
   }
 
+  const hostThumbnailInput = qs('#host-thumbnail-input');
+  const hostDropzone = qs('#host-thumbnail-dropzone');
+  if (hostThumbnailInput && hostDropzone) {
+    hostDropzone.addEventListener('click', () => hostThumbnailInput.click());
+    hostDropzone.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        hostThumbnailInput.click();
+      }
+    });
+    hostThumbnailInput.addEventListener('change', () => {
+      const file = hostThumbnailInput.files && hostThumbnailInput.files[0];
+      handleHostThumbnailFile(file);
+    });
+    hostDropzone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      hostDropzone.classList.add('dragging');
+    });
+    hostDropzone.addEventListener('dragleave', () => hostDropzone.classList.remove('dragging'));
+    hostDropzone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      hostDropzone.classList.remove('dragging');
+      const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+      handleHostThumbnailFile(file);
+    });
+  }
+
   const paymentMethods = qs('#payment-methods');
   if (paymentMethods) {
     paymentMethods.addEventListener('change', togglePaymentNumberInput);
@@ -1454,6 +1992,13 @@ function bindGlobalEvents() {
       }
     }, { passive: true });
   }
+
+  window.addEventListener('hashchange', () => {
+    const screen = resolveScreenFromHash();
+    if (screen !== TOKA_APP_STATE.currentScreen) {
+      showScreen(screen);
+    }
+  });
 }
 
 function initializeLandingState(onboardingDone) {
@@ -1475,7 +2020,8 @@ function initializeLandingState(onboardingDone) {
   renderDiscover();
   renderTickets();
   renderProfile();
-  showScreen('screen-home');
+  const screenFromHash = resolveScreenFromHash();
+  showScreen(screenFromHash || 'screen-home');
 }
 
 function initApp() {
@@ -1508,6 +2054,7 @@ function initApp() {
   });
 
   renderHostScreen();
+  renderCalendarScreen();
   if (qs('#host-price') && qs('#host-free')?.checked) {
     qs('#host-price').closest('.field-group')?.classList.add('hidden');
   }
@@ -1540,3 +2087,11 @@ window.togglePaymentNumberInput = togglePaymentNumberInput;
 window.postComment = postComment;
 window.postOrgUpdate = postOrgUpdate;
 window.handleLike = handleLike;
+window.saveSelectedEventToCalendar = saveSelectedEventToCalendar;
+window.changeCalendarMonth = changeCalendarMonth;
+window.goToTodayCalendarMonth = goToTodayCalendarMonth;
+window.openCalendarEventModal = openCalendarEventModal;
+window.closeCalendarEventModal = closeCalendarEventModal;
+window.openHostDashboard = openHostDashboard;
+window.clearHostThumbnail = clearHostThumbnail;
+window.startOnboarding = startOnboarding;

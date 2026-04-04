@@ -75,6 +75,14 @@
                     <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-discover')">See all</button>
                 </div>
                 <div id="home-upcoming-grid" class="grid event-grid"></div>
+
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Momentum</p>
+                        <h3>Trending</h3>
+                    </div>
+                </div>
+                <div id="home-trending-row" class="trending-row"></div>
             </div>
         </div>
 
@@ -114,6 +122,46 @@
                     </div>
                 </div>
                 <div id="discover-results" class="grid event-grid"></div>
+
+                <div class="section-head">
+                    <div>
+                        <p class="eyebrow">Heat Check</p>
+                        <h3>Trending Now</h3>
+                    </div>
+                </div>
+                <div id="discover-trending-row" class="trending-row"></div>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-calendar">
+            <div class="container calendar-layout">
+                <div class="topbar">
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-home')">← Home</button>
+                    <h2>Calendar</h2>
+                    <button type="button" class="button button-ghost button-small" onclick="goToTodayCalendarMonth()">Today</button>
+                </div>
+
+                <div id="calendar-auth-guard" class="card hidden">
+                    <h3>Complete onboarding to use calendar</h3>
+                    <p class="text-muted">Add your profile details first so your saved events stay linked to your account.</p>
+                    <button type="button" class="button button-primary" onclick="startOnboarding()">Finish Onboarding</button>
+                </div>
+
+                <div id="calendar-shell">
+                    <div class="calendar-head card">
+                        <button type="button" class="button button-ghost button-small" onclick="changeCalendarMonth(-1)">←</button>
+                        <h3 id="calendar-month-label">Month</h3>
+                        <button type="button" class="button button-ghost button-small" onclick="changeCalendarMonth(1)">→</button>
+                    </div>
+                    <div class="calendar-weekdays" id="calendar-weekdays"></div>
+                    <div class="calendar-grid" id="calendar-grid"></div>
+
+                    <div class="calendar-legend card">
+                        <div class="legend-item"><span class="legend-dot holiday"></span>Public Holiday</div>
+                        <div class="legend-item"><span class="legend-dot event-no-ticket"></span>Saved (No Ticket)</div>
+                        <div class="legend-item"><span class="legend-dot event-ticket"></span>Saved (With Ticket)</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -215,7 +263,10 @@
                             <p class="eyebrow">Ticket type</p>
                             <strong id="detail-price-line">General Admission</strong>
                         </div>
-                        <button type="button" class="button button-primary" id="detail-ticket-button" onclick="openRegistration(TOKA_APP_STATE.selectedEventId)">Get Ticket</button>
+                        <div class="detail-footer-actions">
+                            <button type="button" class="button button-secondary" id="detail-calendar-button" onclick="saveSelectedEventToCalendar(false)">Save to Calendar</button>
+                            <button type="button" class="button button-primary" id="detail-ticket-button" onclick="openRegistration(TOKA_APP_STATE.selectedEventId)">Get Ticket</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -408,6 +459,16 @@
                                 <label for="host-description">Event Description</label>
                                 <textarea id="host-description" maxlength="300" placeholder="Tell people why they should come."></textarea>
                             </div>
+
+                            <div class="field-group">
+                                <label>Event Thumbnail</label>
+                                <div id="host-thumbnail-dropzone" class="upload-zone" tabindex="0" role="button" aria-label="Upload event thumbnail">
+                                    <p><strong>Drop image here</strong> or click to upload</p>
+                                    <p class="text-muted">PNG or JPG recommended</p>
+                                    <input id="host-thumbnail-input" type="file" accept="image/*" hidden />
+                                </div>
+                                <div id="host-thumbnail-preview" class="upload-preview hidden"></div>
+                            </div>
                         </div>
                     </section>
 
@@ -428,6 +489,23 @@
                         <button type="button" class="button button-primary hidden" id="host-publish-button" onclick="publishEvent()">Publish Event</button>
                     </div>
                 </form>
+
+                <button type="button" class="button button-ghost" onclick="openHostDashboard()">Open Host Dashboard</button>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-host-dashboard">
+            <div class="container host-dashboard-layout">
+                <div class="topbar">
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-host')">← Host</button>
+                    <h2>Host Dashboard</h2>
+                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-home')">Home</button>
+                </div>
+                <div id="host-dashboard-guard" class="card hidden">
+                    <h3>Host access only</h3>
+                    <p class="text-muted">Publish at least one event from this profile to unlock dashboard analytics.</p>
+                </div>
+                <div id="host-dashboard-content" class="host-dashboard-content"></div>
             </div>
         </div>
 
@@ -483,6 +561,10 @@
         <span class="nav-icon">🔍</span>
         <span class="nav-label">Discover</span>
       </button>
+                        <button type="button" onclick="showScreen('screen-calendar')" class="nav-item" data-screen="screen-calendar">
+                <span class="nav-icon">🗓️</span>
+                <span class="nav-label">Calendar</span>
+            </button>
             <button type="button" onclick="showScreen('screen-my-tickets')" class="nav-item" data-screen="screen-my-tickets">
         <span class="nav-icon">🎫</span>
         <span class="nav-label">Tickets</span>
@@ -492,8 +574,17 @@
         <span class="nav-label">Profile</span>
       </button>
         </nav>
+
+                <div id="calendar-event-modal" class="calendar-modal hidden" aria-hidden="true">
+                        <div class="calendar-modal-backdrop" onclick="closeCalendarEventModal()"></div>
+                        <div class="calendar-modal-card card">
+                                <button type="button" class="button button-ghost button-small calendar-close" onclick="closeCalendarEventModal()">Close ✕</button>
+                                <div id="calendar-modal-content"></div>
+                        </div>
+                </div>
     </div>
 
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="data.js"></script>
     <script src="app.js"></script>
 </body>
