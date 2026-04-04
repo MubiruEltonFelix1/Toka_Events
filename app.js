@@ -17,8 +17,13 @@ const TOKA_APP_STATE = {
     calendarYear: new Date().getFullYear(),
     hostThumbnailDataUrl: '',
     recordedImpressions: {},
-    hostChartInstances: {}
+    hostChartInstances: {},
+    isPublishingHostEvent: false,
+    lastPublishedFingerprint: '',
+    lastPublishedAt: 0
 };
+
+  const TOKA_HOST_PUBLISH_DUPLICATE_WINDOW_MS = 12000;
 
 const TOKA_AVATAR_COLORS = ['#F4500A', '#F7B731', '#C6F135', '#2E2E2E', '#7B3F00', '#D16B34', '#AA4C1D', '#5C3B1E'];
 
@@ -1316,9 +1321,54 @@ function renderHostScreen() {
   }
   if (publishButton) {
     publishButton.classList.toggle('hidden', TOKA_APP_STATE.hostStep !== 3);
+    if (TOKA_APP_STATE.hostStep === 3) {
+      const isLocked = TOKA_APP_STATE.isPublishingHostEvent || TOKA_APP_STATE.hostSubmitted;
+      publishButton.disabled = isLocked;
+      publishButton.textContent = TOKA_APP_STATE.isPublishingHostEvent ? 'Publishing...' : (TOKA_APP_STATE.hostSubmitted ? 'Published ✓' : 'Publish Event');
+    }
   }
   renderHostPreview();
   renderHostThumbnailPreview();
+}
+
+function getHostPublishFingerprint(formData) {
+  return [
+    formData.name,
+    formData.category,
+    formData.date,
+    formData.startTime,
+    formData.endTime,
+    formData.venue,
+    formData.city,
+    formData.free ? '1' : '0',
+    String(formData.price),
+    String(formData.capacity),
+    formData.description,
+    formData.thumbnailDataUrl ? 'thumb' : 'no-thumb'
+  ].join('|').toLowerCase();
+}
+
+function setHostPublishButtonState({ disabled, label }) {
+  const publishButton = qs('#host-publish-button');
+  if (!publishButton) {
+    return;
+  }
+  publishButton.disabled = Boolean(disabled);
+  if (label) {
+    publishButton.textContent = label;
+  }
+}
+
+function resetHostPublishGuard() {
+  TOKA_APP_STATE.hostSubmitted = false;
+  TOKA_APP_STATE.isPublishingHostEvent = false;
+  setHostPublishButtonState({ disabled: false, label: 'Publish Event' });
+
+  const success = qs('#host-success');
+  if (success) {
+    success.classList.add('hidden');
+    success.innerHTML = '';
+  }
 }
 
 function getHostFormData() {
@@ -1418,55 +1468,84 @@ function goHostBack() {
 }
 
 function publishEvent() {
+  if (TOKA_APP_STATE.isPublishingHostEvent) {
+    toast('Publishing in progress. Please wait.');
+    return;
+  }
+
   const formData = getHostFormData();
   if (!formData.name || !formData.date || !formData.venue || !formData.city || !formData.capacity) {
     toast('Please complete the required event details.');
     return;
   }
 
-  const profile = getUserProfile();
-  const createdEvent = {
-    id: `evt-${Date.now()}`,
-    name: formData.name,
-    category: formData.category,
-    emoji: getEmojiForCategory(formData.category),
-    gradient: getGradientForCategory(formData.category),
-    date: formData.date,
-    time: formData.startTime || '6:00 PM',
-    endTime: formData.endTime || '9:00 PM',
-    venue: formData.venue,
-    city: formData.city,
-    price: formData.free ? 0 : formData.price,
-    currency: 'UGX',
-    capacity: formData.capacity,
-    registered: 0,
-    description: formData.description || 'A new Toka event created by the community.',
-    organiser: profile.name || 'You',
-    tags: [formData.category.toLowerCase()],
-    attendees: profile.name ? [profile.name] : [],
-    createdBy: 'user',
-    thumbnailDataUrl: formData.thumbnailDataUrl || ''
-  };
-
-  saveEvent(createdEvent);
-  const success = qs('#host-success');
-  if (success) {
-    success.classList.remove('hidden');
-    success.innerHTML = `
-      <h3>Your event is live! 🚀</h3>
-      <p class="text-muted">Share this link so people can discover your event.</p>
-      <div class="share-link-row">
-        <code>toka.app/e/${createdEvent.id}</code>
-        <button type="button" class="button button-secondary button-small" onclick="copyToClipboard('toka.app/e/${createdEvent.id}')">Copy</button>
-      </div>
-    `;
+  const now = Date.now();
+  const fingerprint = getHostPublishFingerprint(formData);
+  if (
+    TOKA_APP_STATE.lastPublishedFingerprint === fingerprint &&
+    now - Number(TOKA_APP_STATE.lastPublishedAt || 0) < TOKA_HOST_PUBLISH_DUPLICATE_WINDOW_MS
+  ) {
+    toast('This event was already published. Edit details before publishing again.');
+    return;
   }
-  TOKA_APP_STATE.hostSubmitted = true;
-  renderHome();
-  renderDiscover();
-  renderCalendarScreen();
-  renderProfile();
-  toast('Event published.');
+
+  TOKA_APP_STATE.isPublishingHostEvent = true;
+  setHostPublishButtonState({ disabled: true, label: 'Publishing...' });
+
+  try {
+    const profile = getUserProfile();
+    const createdEvent = {
+      id: `evt-${Date.now()}`,
+      name: formData.name,
+      category: formData.category,
+      emoji: getEmojiForCategory(formData.category),
+      gradient: getGradientForCategory(formData.category),
+      date: formData.date,
+      time: formData.startTime || '6:00 PM',
+      endTime: formData.endTime || '9:00 PM',
+      venue: formData.venue,
+      city: formData.city,
+      price: formData.free ? 0 : formData.price,
+      currency: 'UGX',
+      capacity: formData.capacity,
+      registered: 0,
+      description: formData.description || 'A new Toka event created by the community.',
+      organiser: profile.name || 'You',
+      tags: [formData.category.toLowerCase()],
+      attendees: profile.name ? [profile.name] : [],
+      createdBy: 'user',
+      thumbnailDataUrl: formData.thumbnailDataUrl || ''
+    };
+
+    saveEvent(createdEvent);
+    const success = qs('#host-success');
+    if (success) {
+      success.classList.remove('hidden');
+      success.innerHTML = `
+        <h3>Your event is live! 🚀</h3>
+        <p class="text-muted">Share this link so people can discover your event.</p>
+        <div class="share-link-row">
+          <code>toka.app/e/${createdEvent.id}</code>
+          <button type="button" class="button button-secondary button-small" onclick="copyToClipboard('toka.app/e/${createdEvent.id}')">Copy</button>
+        </div>
+      `;
+    }
+
+    TOKA_APP_STATE.hostSubmitted = true;
+    TOKA_APP_STATE.lastPublishedFingerprint = fingerprint;
+    TOKA_APP_STATE.lastPublishedAt = now;
+    setHostPublishButtonState({ disabled: true, label: 'Published ✓' });
+    renderHome();
+    renderDiscover();
+    renderCalendarScreen();
+    renderProfile();
+    toast('Event published.');
+  } catch (error) {
+    toast('Could not publish event. Please try again.');
+    setHostPublishButtonState({ disabled: false, label: 'Publish Event' });
+  } finally {
+    TOKA_APP_STATE.isPublishingHostEvent = false;
+  }
 }
 
 function renderHostThumbnailPreview() {
@@ -1918,7 +1997,10 @@ function bindGlobalEvents() {
   const hostForm = qs('#host-form');
   if (hostForm) {
     ['input', 'change'].forEach((eventType) => {
-      hostForm.addEventListener(eventType, () => renderHostPreview());
+      hostForm.addEventListener(eventType, () => {
+        resetHostPublishGuard();
+        renderHostPreview();
+      });
     });
   }
 
@@ -2028,6 +2110,7 @@ function initApp() {
   bindGlobalEvents();
   const onboardingDone = getOnboardingComplete();
   seedMockComments();
+  syncCalendarEntriesFromTickets();
   initializeLandingState(onboardingDone);
   const searchInput = qs('#discover-search');
   if (searchInput) {

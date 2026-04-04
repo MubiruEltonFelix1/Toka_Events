@@ -534,6 +534,47 @@ function saveCalendarEntry(entry) {
     return nextEntry;
 }
 
+function syncCalendarEntriesFromTickets() {
+    const entries = getCalendarEntries();
+    const tickets = getTickets();
+    const byEventId = new Map(entries.map((entry) => [entry.eventId, entry]));
+    let added = 0;
+    let upgraded = 0;
+
+    tickets.forEach((ticket) => {
+        if (!ticket || !ticket.eventId) {
+            return;
+        }
+
+        const existing = byEventId.get(ticket.eventId);
+        if (!existing) {
+            const nextEntry = {
+                eventId: ticket.eventId,
+                savedAt: ticket.createdAt || new Date().toISOString(),
+                withTicket: true
+            };
+            entries.unshift(nextEntry);
+            byEventId.set(ticket.eventId, nextEntry);
+            added += 1;
+            return;
+        }
+
+        if (!existing.withTicket) {
+            existing.withTicket = true;
+            if (!existing.savedAt) {
+                existing.savedAt = ticket.createdAt || new Date().toISOString();
+            }
+            upgraded += 1;
+        }
+    });
+
+    if (added || upgraded) {
+        writeStorage(TOKA_STORAGE_KEYS.calendarEntries, entries);
+    }
+
+    return { added, upgraded };
+}
+
 function getEventMetrics() {
     return readStorage(TOKA_STORAGE_KEYS.eventMetrics, {});
 }
