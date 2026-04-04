@@ -134,7 +134,7 @@ function getEventThumbnail(event) {
         return '';
     }
 
-  return event.thumbnailDataUrl || event.thumbnailUrl || getDefaultEventThumbnail(event);
+    return event.thumbnailDataUrl || event.thumbnailUrl || getDefaultEventThumbnail(event);
 }
 
 function getUpcomingEvents(count = 3) {
@@ -395,9 +395,9 @@ function renderTrendingRow(containerId) {
     }
 
     container.innerHTML = trending.map((event) => {
-                const thumbnail = getEventThumbnail(event);
-                recordEventCardImpression(event.id, containerId);
-                return `
+        const thumbnail = getEventThumbnail(event);
+        recordEventCardImpression(event.id, containerId);
+        return `
       <article class="trending-card" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
         <div class="trending-thumb-wrap">
           <img class="trending-thumb" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} cover image" loading="lazy" decoding="async" />
@@ -481,14 +481,14 @@ function renderDetailScreen(event) {
     }
     const calendarButton = qs('#detail-calendar-button');
     if (calendarButton) {
-      const savedEntry = getCalendarSavedEntry(event.id);
-      if (savedEntry && savedEntry.withTicket) {
-        calendarButton.textContent = 'Saved with Ticket ✓';
-      } else if (savedEntry) {
-        calendarButton.textContent = 'Saved to Calendar ✓';
-      } else {
-        calendarButton.textContent = 'Save to Calendar';
-      }
+        const savedEntry = getCalendarSavedEntry(event.id);
+        if (savedEntry && savedEntry.withTicket) {
+            calendarButton.textContent = 'Saved with Ticket ✓';
+        } else if (savedEntry) {
+            calendarButton.textContent = 'Saved to Calendar ✓';
+        } else {
+            calendarButton.textContent = 'Save to Calendar';
+        }
     }
     if (priceLine) {
         priceLine.textContent = `${event.price > 0 ? formatPrice(event.price, event.currency) : 'Free'} · General Admission`;
