@@ -87,29 +87,29 @@ function getEventById(eventId) {
 }
 
 function isLoggedInUser() {
-  const profile = getUserProfile();
-  return Boolean(getOnboardingComplete() && profile && profile.name && profile.phone);
+    const profile = getUserProfile();
+    return Boolean(getOnboardingComplete() && profile && profile.name && profile.phone);
 }
 
 function getCalendarSavedEntry(eventId) {
-  return getCalendarEntries().find((entry) => entry.eventId === eventId) || null;
+    return getCalendarEntries().find((entry) => entry.eventId === eventId) || null;
 }
 
 function hasTicketForEvent(eventId) {
-  return getTickets().some((ticket) => ticket.eventId === eventId);
+    return getTickets().some((ticket) => ticket.eventId === eventId);
 }
 
 function recordEventCardImpression(eventId, context = 'feed') {
-  const key = `${context}:${eventId}`;
-  if (TOKA_APP_STATE.recordedImpressions[key]) {
-    return;
-  }
-  TOKA_APP_STATE.recordedImpressions[key] = true;
-  incrementEventImpression(eventId);
+    const key = `${context}:${eventId}`;
+    if (TOKA_APP_STATE.recordedImpressions[key]) {
+        return;
+    }
+    TOKA_APP_STATE.recordedImpressions[key] = true;
+    incrementEventImpression(eventId);
 }
 
 function getEventThumbnail(event) {
-  return event && event.thumbnailDataUrl ? event.thumbnailDataUrl : '';
+    return event && event.thumbnailDataUrl ? event.thumbnailDataUrl : '';
 }
 
 function getUpcomingEvents(count = 3) {
@@ -172,31 +172,31 @@ function showScreen(screenId) {
         renderHostScreen();
     }
     if (screenId === 'screen-calendar') {
-      renderCalendarScreen();
+        renderCalendarScreen();
     }
     if (screenId === 'screen-host-dashboard') {
-      renderHostDashboard();
+        renderHostDashboard();
     }
 }
 
-  function syncHashWithScreen(screenId) {
+function syncHashWithScreen(screenId) {
     const mapping = {
-      'screen-home': '#/home',
-      'screen-discover': '#/discover',
-      'screen-calendar': '#/calendar',
-      'screen-my-tickets': '#/tickets',
-      'screen-profile': '#/profile',
-      'screen-host': '#/host',
-      'screen-host-dashboard': '#/host/dashboard'
+        'screen-home': '#/home',
+        'screen-discover': '#/discover',
+        'screen-calendar': '#/calendar',
+        'screen-my-tickets': '#/tickets',
+        'screen-profile': '#/profile',
+        'screen-host': '#/host',
+        'screen-host-dashboard': '#/host/dashboard'
     };
     const nextHash = mapping[screenId];
     if (!nextHash || window.location.hash === nextHash) {
-      return;
+        return;
     }
     window.location.hash = nextHash;
-  }
+}
 
-  function resolveScreenFromHash() {
+function resolveScreenFromHash() {
     const hash = (window.location.hash || '').toLowerCase();
     if (hash === '#/host/dashboard') return 'screen-host-dashboard';
     if (hash === '#/calendar') return 'screen-calendar';
@@ -205,7 +205,7 @@ function showScreen(screenId) {
     if (hash === '#/profile') return 'screen-profile';
     if (hash === '#/host') return 'screen-host';
     return 'screen-home';
-  }
+}
 
 function setDiscoverFilters({ query = TOKA_APP_STATE.discoverQuery, category = TOKA_APP_STATE.discoverCategory, timeFilter = TOKA_APP_STATE.discoverTimeFilter } = {}) {
     TOKA_APP_STATE.discoverQuery = query;
@@ -353,7 +353,7 @@ function getTrendingEvents(limit = 8) {
                 (Number(metric.calendarAddsWithTicket || 0) * 2) +
                 Number(metric.calendarAddsWithoutTicket || 0) +
                 (Number(metric.impressions || 0) * 0.12);
-            return { ...event, trendingScore: score };
+            return {...event, trendingScore: score };
         })
         .sort((left, right) => right.trendingScore - left.trendingScore)
         .slice(0, limit);
@@ -372,9 +372,9 @@ function renderTrendingRow(containerId) {
     }
 
     container.innerHTML = trending.map((event) => {
-        const thumbnail = getEventThumbnail(event);
-        recordEventCardImpression(event.id, containerId);
-        return `
+                const thumbnail = getEventThumbnail(event);
+                recordEventCardImpression(event.id, containerId);
+                return `
       <article class="trending-card" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
         <div class="trending-thumb-wrap">
           ${thumbnail ? `<img class="trending-thumb" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} thumbnail" />` : `<div class="trending-thumb-fallback">${escapeHtml(event.emoji || '🎫')}</div>`}

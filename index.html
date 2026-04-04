@@ -561,7 +561,7 @@
         <span class="nav-icon">🔍</span>
         <span class="nav-label">Discover</span>
       </button>
-                        <button type="button" onclick="showScreen('screen-calendar')" class="nav-item" data-screen="screen-calendar">
+            <button type="button" onclick="showScreen('screen-calendar')" class="nav-item" data-screen="screen-calendar">
                 <span class="nav-icon">🗓️</span>
                 <span class="nav-label">Calendar</span>
             </button>
@@ -575,16 +575,16 @@
       </button>
         </nav>
 
-                <div id="calendar-event-modal" class="calendar-modal hidden" aria-hidden="true">
-                        <div class="calendar-modal-backdrop" onclick="closeCalendarEventModal()"></div>
-                        <div class="calendar-modal-card card">
-                                <button type="button" class="button button-ghost button-small calendar-close" onclick="closeCalendarEventModal()">Close ✕</button>
-                                <div id="calendar-modal-content"></div>
-                        </div>
-                </div>
+        <div id="calendar-event-modal" class="calendar-modal hidden" aria-hidden="true">
+            <div class="calendar-modal-backdrop" onclick="closeCalendarEventModal()"></div>
+            <div class="calendar-modal-card card">
+                <button type="button" class="button button-ghost button-small calendar-close" onclick="closeCalendarEventModal()">Close ✕</button>
+                <div id="calendar-modal-content"></div>
+            </div>
+        </div>
     </div>
 
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="data.js"></script>
     <script src="app.js"></script>
 </body>
