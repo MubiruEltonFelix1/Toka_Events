@@ -42,8 +42,8 @@ const TOKA_PROTECTED_SCREENS = new Set([
     'screen-my-tickets',
     'screen-profile',
     'screen-host',
-  'screen-host-dashboard',
-  'screen-register'
+    'screen-host-dashboard',
+    'screen-register'
 ]);
 
 window.TOKA_AUTH_STATE = TOKA_AUTH_STATE;
@@ -94,9 +94,9 @@ function isAuthenticatedUser() {
 }
 
 function hasCompletedUserProfile() {
-  const profile = getUserProfile() || {};
-  const interests = Array.isArray(profile.interests) ? profile.interests : [];
-  return Boolean(getOnboardingComplete() && profile.name && profile.phone && interests.length);
+    const profile = getUserProfile() || {};
+    const interests = Array.isArray(profile.interests) ? profile.interests : [];
+    return Boolean(getOnboardingComplete() && profile.name && profile.phone && interests.length);
 }
 
 function getAuthRedirectUrl() {
@@ -497,12 +497,12 @@ function showScreen(screenId) {
         return;
     }
 
-  if (TOKA_PROTECTED_SCREENS.has(screenId) && isAuthenticatedUser() && !hasCompletedUserProfile()) {
-    TOKA_APP_STATE.postOnboardingScreen = screenId;
-    startOnboarding();
-    toast('Complete onboarding to continue.');
-    return;
-  }
+    if (TOKA_PROTECTED_SCREENS.has(screenId) && isAuthenticatedUser() && !hasCompletedUserProfile()) {
+        TOKA_APP_STATE.postOnboardingScreen = screenId;
+        startOnboarding();
+        toast('Complete onboarding to continue.');
+        return;
+    }
 
     TOKA_APP_STATE.currentScreen = screenId;
     qsa('.screen').forEach((screen) => {
