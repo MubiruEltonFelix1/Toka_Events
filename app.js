@@ -24,6 +24,16 @@ const TOKA_APP_STATE = {
     postOnboardingScreen: ''
 };
 
+const TOKA_PWA_STATE = {
+    deferredInstallPrompt: null
+};
+
+const TOKA_PWA_STORAGE_KEYS = {
+    installPromptDismissedAt: 'toka_pwa_install_prompt_dismissed_at'
+};
+
+const TOKA_PWA_INSTALL_PROMPT_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
 const TOKA_HOST_PUBLISH_DUPLICATE_WINDOW_MS = 12000;
 
 const TOKA_AUTH_STATE = {
@@ -117,6 +127,107 @@ function getAuthEmailLabel() {
     return `${trimmedLocal}@${domainPart}`;
 }
 
+function isStandalonePwa() {
+  const standaloneMatch = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+  const iosStandalone = Boolean(window.navigator && window.navigator.standalone);
+  return Boolean(standaloneMatch || iosStandalone);
+}
+
+function isIosSafariInstallPath() {
+  const ua = window.navigator.userAgent || '';
+  const isIos = /iphone|ipad|ipod/i.test(ua);
+  const isSafari = /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
+  return Boolean(isIos && isSafari);
+}
+
+function getInstallPromptDismissedAt() {
+  const rawValue = window.localStorage.getItem(TOKA_PWA_STORAGE_KEYS.installPromptDismissedAt);
+  const parsed = Number(rawValue || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function setInstallPromptDismissedNow() {
+  window.localStorage.setItem(TOKA_PWA_STORAGE_KEYS.installPromptDismissedAt, String(Date.now()));
+}
+
+function shouldShowInstallCta() {
+  if (isStandalonePwa()) {
+    return false;
+  }
+
+  const lastDismissedAt = getInstallPromptDismissedAt();
+  if (lastDismissedAt && Date.now() - lastDismissedAt < TOKA_PWA_INSTALL_PROMPT_COOLDOWN_MS) {
+    return false;
+  }
+
+  return Boolean(TOKA_PWA_STATE.deferredInstallPrompt || isIosSafariInstallPath());
+}
+
+function updateInstallCtaVisibility() {
+  const shouldShow = shouldShowInstallCta();
+  qsa('.js-install-app-btn').forEach((button) => {
+    button.classList.toggle('hidden', !shouldShow);
+  });
+}
+
+async function promptInstallApp() {
+  if (isStandalonePwa()) {
+    toast('Toka is already installed on this device.');
+    return;
+  }
+
+  if (TOKA_PWA_STATE.deferredInstallPrompt) {
+    const installEvent = TOKA_PWA_STATE.deferredInstallPrompt;
+    installEvent.prompt();
+    const choice = await installEvent.userChoice;
+    TOKA_PWA_STATE.deferredInstallPrompt = null;
+    if (choice && choice.outcome === 'accepted') {
+      toast('Installing Toka...');
+    } else {
+      setInstallPromptDismissedNow();
+    }
+    updateInstallCtaVisibility();
+    return;
+  }
+
+  if (isIosSafariInstallPath()) {
+    window.alert('Install Toka on iPhone/iPad:\n1) Tap Share in Safari\n2) Choose Add to Home Screen\n3) Tap Add');
+    setInstallPromptDismissedNow();
+    updateInstallCtaVisibility();
+    return;
+  }
+
+  toast('Install is not available yet in this browser.');
+}
+
+function registerPwaInstallHandlers() {
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    TOKA_PWA_STATE.deferredInstallPrompt = event;
+    updateInstallCtaVisibility();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    TOKA_PWA_STATE.deferredInstallPrompt = null;
+    updateInstallCtaVisibility();
+    toast('Toka installed successfully.');
+  });
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) {
+    return;
+  }
+
+  try {
+    const path = window.location.pathname || '/';
+    const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
+    await navigator.serviceWorker.register(`${basePath}sw.js?v=20260405-1`, { scope: basePath });
+  } catch (error) {
+    console.warn('Service worker registration failed', error);
+  }
+}
+
 function setAuthFeedback(message, type = 'error') {
     TOKA_AUTH_STATE.feedbackMessage = String(message || '');
     TOKA_AUTH_STATE.feedbackType = type;
@@ -142,16 +253,20 @@ function renderAuthHeader() {
     if (isAuthenticatedUser()) {
         container.innerHTML = `
     <div class="auth-status">
+    <button type="button" class="button button-ghost button-small js-install-app-btn hidden" onclick="promptInstallApp()">Install App</button>
     <span class="auth-email" title="${escapeHtml(TOKA_AUTH_STATE.user.email || '')}">${escapeHtml(getAuthEmailLabel())}</span>
     <button type="button" class="button button-secondary button-small auth-sign-out" onclick="logoutUser()">Sign Out</button>
     </div>
   `;
+        updateInstallCtaVisibility();
         return;
     }
 
     container.innerHTML = `
+    <button type="button" class="button button-ghost button-small js-install-app-btn hidden" onclick="promptInstallApp()">Install App</button>
     <button type="button" class="button button-primary button-small auth-sign-in" onclick="openAuthModal('signin')">Sign In</button>
   `;
+    updateInstallCtaVisibility();
 }
 
 function openAuthModal(mode = 'signin', message = '') {
@@ -1509,6 +1624,8 @@ function renderConfirmation(ticket) {
   if (copyButton) {
     copyButton.onclick = () => copyToClipboard(`toka.app/ref/${ticket.referralCode}`);
   }
+
+  updateInstallCtaVisibility();
 }
 
 function submitRegistration(event) {
@@ -1672,6 +1789,7 @@ function renderProfile() {
       <button type="button" class="settings-item" onclick="editProfile()"><span>Edit Profile</span><span>›</span></button>
       <button type="button" class="settings-item" onclick="toggleNotifications()"><span>Notifications</span><span>${profile.notificationsEnabled === false ? 'Off' : 'On'}</span></button>
       <button type="button" class="settings-item" onclick="${hasHostedEvents ? 'openHostDashboard()' : "showScreen('screen-host')"}"><span>${hasHostedEvents ? 'Host Dashboard' : 'Start Hosting'}</span><span>${hasHostedEvents ? '↗' : '›'}</span></button>
+      <button type="button" class="settings-item js-install-app-btn hidden" onclick="promptInstallApp()"><span>Install Toka App</span><span>↓</span></button>
       <div class="settings-item static-item">
         <span>Language</span>
         <span>${escapeHtml(profile.language || 'English')}</span>
@@ -1680,6 +1798,7 @@ function renderProfile() {
       <button type="button" class="settings-item" onclick="aboutToka()"><span>About Toka</span><span>i</span></button>
       <button type="button" class="settings-item danger" onclick="logoutUser()"><span>Logout</span><span>⎋</span></button>
     `;
+    updateInstallCtaVisibility();
   }
 }
 
@@ -2799,6 +2918,8 @@ function initializeLandingState() {
 }
 
 async function initApp() {
+  registerPwaInstallHandlers();
+  await registerServiceWorker();
   bindGlobalEvents();
   window.addEventListener('toka:cloud-events-updated', () => {
     renderHome();
@@ -2865,6 +2986,8 @@ async function initApp() {
   if (!TOKA_AUTH_STATE.isAuthenticated) {
     renderAuthHeader();
   }
+
+  updateInstallCtaVisibility();
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
@@ -2904,3 +3027,4 @@ window.closeAuthModal = closeAuthModal;
 window.openHostDashboard = openHostDashboard;
 window.clearHostThumbnail = clearHostThumbnail;
 window.startOnboarding = startOnboarding;
+window.promptInstallApp = promptInstallApp;

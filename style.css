@@ -616,6 +616,10 @@ button:active,
     white-space: nowrap;
 }
 
+.js-install-app-btn {
+    white-space: nowrap;
+}
+
 .auth-sign-in {
     background: #FF6B00;
     border-color: transparent;
@@ -1686,6 +1690,21 @@ textarea {
     justify-content: center;
     flex-wrap: wrap;
     gap: 10px;
+}
+
+.confirm-install-row {
+    width: 100%;
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(244, 80, 10, 0.08);
+    border: 1px solid rgba(244, 80, 10, 0.2);
+}
+
+.confirm-install-row .text-muted {
+    margin: 0;
 }
 
 .bottom-nav {
