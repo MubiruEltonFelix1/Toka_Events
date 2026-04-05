@@ -1490,6 +1490,10 @@ textarea {
     justify-items: center;
 }
 
+.confirm-card .text-muted {
+    margin-bottom: 0;
+}
+
 .confirm-mark {
     width: 96px;
     height: 96px;
@@ -1536,6 +1540,14 @@ textarea {
     border: 1px solid rgba(244, 80, 10, 0.22);
     display: grid;
     place-items: center;
+    overflow: hidden;
+}
+
+.qr-box canvas,
+.qr-box img {
+    width: 160px !important;
+    height: 160px !important;
+    display: block;
 }
 
 .qr-mark {
@@ -1546,6 +1558,117 @@ textarea {
     color: var(--toka-orange);
     font-family: 'Space Grotesk', sans-serif;
     font-size: 2.8rem;
+}
+
+.qr-fallback {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+}
+
+.qr-fallback small {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.share-card {
+    width: 100%;
+    border-radius: 22px;
+    overflow: hidden;
+    border: 1px solid rgba(244, 80, 10, 0.18);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    text-align: left;
+}
+
+.share-card-cover {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background: var(--share-card-gradient, linear-gradient(135deg, #2E2E2E, #F4500A));
+}
+
+.share-card-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    filter: saturate(1.05) contrast(1.03);
+}
+
+.share-card-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(13, 13, 13, 0.12), rgba(13, 13, 13, 0.7));
+}
+
+.share-card-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+}
+
+.share-card-body {
+    display: grid;
+    gap: 8px;
+    padding: 18px;
+}
+
+.share-card-body h3 {
+    margin-bottom: 0;
+}
+
+.share-card-meta {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+}
+
+.share-card-footer {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    color: var(--text-primary);
+}
+
+.publish-success-layout {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.92fr);
+    align-items: start;
+}
+
+.publish-success-copy {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+}
+
+.publish-success-copy h3 {
+    margin-bottom: 0;
+}
+
+.publish-success-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.publish-success-link-row {
+    justify-content: flex-start;
+}
+
+.publish-success-link-row code {
+    width: 100%;
+    text-align: center;
 }
 
 .share-link-row code,
@@ -1562,6 +1685,7 @@ textarea {
     width: 100%;
     justify-content: center;
     flex-wrap: wrap;
+    gap: 10px;
 }
 
 .bottom-nav {
@@ -1812,6 +1936,9 @@ textarea {
     }
     .detail-footer {
         padding: 1rem;
+    }
+    .publish-success-layout {
+        grid-template-columns: 1fr;
     }
     h1 {
         font-size: clamp(1.75rem, 8vw, 2rem);

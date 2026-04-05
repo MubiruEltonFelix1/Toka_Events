@@ -433,6 +433,89 @@ function getEventById(eventId) {
     return getEvents().find((event) => event.id === eventId) || null;
 }
 
+function isEventPast(event) {
+  if (!event || !event.date) {
+    return false;
+  }
+
+  const eventDate = new Date(`${event.date}T12:00:00`);
+  if (Number.isNaN(eventDate.getTime())) {
+    return false;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return eventDate < today;
+}
+
+function getTicketQrPayload(ticket, event) {
+  const safeEvent = event || {};
+  return JSON.stringify({
+    ticketCode: ticket.ticketCode,
+    attendee: ticket.fullName,
+    eventId: ticket.eventId,
+    eventName: safeEvent.name || '',
+    date: safeEvent.date || '',
+    time: safeEvent.time || '',
+    venue: safeEvent.venue || ''
+  });
+}
+
+function renderQrCode(container, payload) {
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = '';
+  container.dataset.qrPayload = payload;
+
+  if (window.QRCode && typeof window.QRCode === 'function') {
+    try {
+      const qr = new window.QRCode(container, {
+        text: payload,
+        width: 160,
+        height: 160,
+        colorDark: '#0D0D0D',
+        colorLight: '#FAF7F2',
+        correctLevel: window.QRCode.CorrectLevel.M
+      });
+
+      if (qr && typeof qr.makeCode === 'function') {
+        qr.makeCode(payload);
+        return;
+      }
+    } catch (error) {
+      console.warn('QR render failed', error);
+    }
+  }
+
+  container.innerHTML = `<div class="qr-fallback"><div class="qr-mark">T</div><small>QR unavailable</small></div>`;
+}
+
+function getSharableEventCardMarkup(event) {
+  const thumbnail = getEventThumbnail(event);
+  const hostName = escapeHtml(event.organiser || 'Toka Host');
+  return `
+    <article class="share-card" style="--share-card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
+    <div class="share-card-cover">
+      <img class="share-card-image" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} cover image" loading="lazy" decoding="async" />
+      <div class="share-card-overlay"></div>
+      <span class="badge share-card-badge">Event Card</span>
+    </div>
+    <div class="share-card-body">
+      <p class="eyebrow">Shareable for organisers</p>
+      <h3>${escapeHtml(event.name)}</h3>
+      <p class="share-card-meta">${escapeHtml(formatDateTime(event))}</p>
+      <p class="share-card-meta">${escapeHtml(event.venue)} · ${escapeHtml(event.city)}</p>
+      <div class="share-card-footer">
+      <span>${hostName}</span>
+      <strong>${escapeHtml(formatPrice(event.price, event.currency))}</strong>
+      </div>
+    </div>
+    </article>
+  `;
+}
+
 function isLoggedInUser() {
     return isAuthenticatedUser();
 }
@@ -463,7 +546,7 @@ function getEventThumbnail(event) {
 }
 
 function getUpcomingEvents(count = 3) {
-    return getEvents().slice(0, count);
+  return getEvents().filter((event) => !isEventPast(event)).slice(0, count);
 }
 
 function toast(message) {
@@ -656,7 +739,7 @@ function getFilteredEvents() {
             matchesTime = Number(event.price) > 0;
         }
 
-        return matchesQuery && matchesCategory && matchesTime;
+        return !isEventPast(event) && matchesQuery && matchesCategory && matchesTime;
     });
 }
 
@@ -740,7 +823,7 @@ function renderEventCards(events, container, options = {}) {
 }
 
 function getTrendingEvents(limit = 8) {
-    const events = getEvents();
+  const events = getEvents().filter((event) => !isEventPast(event));
     const now = Date.now();
     const fortyEightHoursAgo = now - (48 * 60 * 60 * 1000);
 
@@ -856,7 +939,10 @@ function renderDetailScreen(event) {
     `;
     }
     if (ticketButton) {
-        ticketButton.textContent = event.price > 0 ? `Get Ticket · ${formatPrice(event.price, event.currency)}` : 'Get Free Ticket';
+      const eventEnded = isEventPast(event);
+      ticketButton.textContent = eventEnded ? 'Ticket sales closed' : (event.price > 0 ? `Get Ticket · ${formatPrice(event.price, event.currency)}` : 'Get Free Ticket');
+      ticketButton.disabled = eventEnded;
+      ticketButton.setAttribute('aria-disabled', String(eventEnded));
     }
     const calendarButton = qs('#detail-calendar-button');
     if (calendarButton) {
@@ -1300,6 +1386,11 @@ function openRegistration(eventId) {
     return;
   }
 
+  if (isEventPast(event)) {
+    toast('Ticket sales for this event have closed.');
+    return;
+  }
+
   if (!isAuthenticatedUser()) {
     TOKA_AUTH_STATE.pendingScreenId = 'screen-register';
     openAuthModal('signin', 'Sign in to register and get your ticket.');
@@ -1406,7 +1497,7 @@ function renderConfirmation(ticket) {
   if (dateEl) dateEl.textContent = formatDateTime(event);
   if (referralEl) referralEl.textContent = `toka.app/ref/${ticket.referralCode}`;
   if (qrEl) {
-    qrEl.innerHTML = `<div class="qr-mark">T</div>`;
+    renderQrCode(qrEl, getTicketQrPayload(ticket, event));
   }
 
   const shareButton = qs('#confirmed-share-button');
@@ -1423,6 +1514,11 @@ function renderConfirmation(ticket) {
 function submitRegistration(event) {
   const form = qs('#register-form');
   if (!form) {
+    return;
+  }
+
+  if (isEventPast(event)) {
+    toast('Ticket sales for this event have closed.');
     return;
   }
 
@@ -1663,6 +1759,31 @@ async function shareTicket(ticketCode, eventName) {
   }
 }
 
+async function shareEventCard(event) {
+  if (!event) {
+    return;
+  }
+
+  const shareBase = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : window.location.href.replace(/\/[^/]*$/, '/');
+  const shareUrl = `${shareBase.replace(/\/$/, '')}/e/${event.id}`;
+  const shareText = `${event.name} on ${formatDateTime(event)} at ${event.venue}, ${event.city}. Ticket: ${formatPrice(event.price, event.currency)}.`;
+  const shareData = {
+    title: event.name,
+    text: shareText,
+    url: shareUrl
+  };
+
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+    } else {
+      await copyToClipboard(`${shareText} ${shareData.url}`);
+    }
+  } catch (error) {
+    await copyToClipboard(`${shareText} ${shareData.url}`);
+  }
+}
+
 async function shareTokaApp() {
   const shareText = 'Discover events, get tickets, and host with Toka.';
   try {
@@ -1752,6 +1873,8 @@ function renderHostScreen() {
   const stepIndicator = qs('#host-step-indicator');
   const nextButton = qs('#host-next-button');
   const publishButton = qs('#host-publish-button');
+  const preview = qs('#host-preview');
+  const success = qs('#host-success');
   const sections = ['#host-step-one', '#host-step-two', '#host-step-three'];
   sections.forEach((selector, index) => {
     const section = qs(selector);
@@ -1772,6 +1895,12 @@ function renderHostScreen() {
       publishButton.disabled = isLocked;
       publishButton.textContent = TOKA_APP_STATE.isPublishingHostEvent ? 'Publishing...' : (TOKA_APP_STATE.hostSubmitted ? 'Published ✓' : 'Publish Event');
     }
+  }
+  if (preview) {
+    preview.classList.toggle('hidden', TOKA_APP_STATE.hostSubmitted && TOKA_APP_STATE.hostStep === 3);
+  }
+  if (success) {
+    success.classList.toggle('hidden', !TOKA_APP_STATE.hostSubmitted || TOKA_APP_STATE.hostStep !== 3);
   }
   renderHostPreview();
   renderHostThumbnailPreview();
@@ -1811,6 +1940,11 @@ function resetHostPublishGuard() {
   TOKA_APP_STATE.hostSubmitted = false;
   TOKA_APP_STATE.isPublishingHostEvent = false;
   setHostPublishButtonState({ disabled: false, label: 'Publish Event' });
+
+  const preview = qs('#host-preview');
+  if (preview) {
+    preview.classList.remove('hidden');
+  }
 
   const success = qs('#host-success');
   if (success) {
@@ -1974,19 +2108,37 @@ function publishEvent() {
     if (success) {
       success.classList.remove('hidden');
       success.innerHTML = `
-        <h3>Your event is live! 🚀</h3>
-        <p class="text-muted">Share this link so people can discover your event.</p>
-        <div class="share-link-row">
-          <code>toka.app/e/${createdEvent.id}</code>
-          <button type="button" class="button button-secondary button-small" onclick="copyToClipboard('toka.app/e/${createdEvent.id}')">Copy</button>
+        <div class="publish-success-layout">
+          <div class="publish-success-copy">
+            <p class="eyebrow">Published</p>
+            <h3>Your event is live</h3>
+            <p class="text-muted">Share the organiser card or the link. People can open the event faster from either one.</p>
+            <div class="publish-success-actions">
+              <button type="button" class="button button-secondary button-small" onclick="copyToClipboard('toka.app/e/${createdEvent.id}')">Copy Link</button>
+              <button type="button" class="button button-primary button-small" id="host-share-card-button">Share Card</button>
+            </div>
+            <div class="share-link-row publish-success-link-row">
+              <code>toka.app/e/${createdEvent.id}</code>
+            </div>
+          </div>
+          ${getSharableEventCardMarkup(createdEvent)}
         </div>
       `;
+      const shareCardButton = qs('#host-share-card-button');
+      if (shareCardButton) {
+        shareCardButton.onclick = () => shareEventCard(createdEvent);
+      }
     }
 
     TOKA_APP_STATE.hostSubmitted = true;
     TOKA_APP_STATE.lastPublishedFingerprint = fingerprint;
     TOKA_APP_STATE.lastPublishedAt = now;
     setHostPublishButtonState({ disabled: true, label: 'Published ✓' });
+
+    const preview = qs('#host-preview');
+    if (preview) {
+      preview.classList.add('hidden');
+    }
 
     TOKA_APP_STATE.homeCategory = 'All';
     TOKA_APP_STATE.discoverCategory = 'All';
