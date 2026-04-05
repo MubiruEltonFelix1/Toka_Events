@@ -1930,12 +1930,25 @@ textarea {
         font-size: 0.82rem;
         line-height: 1.2;
         letter-spacing: 0;
+        max-width: 42vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .auth-header-actions {
         gap: 8px;
+        flex-wrap: nowrap;
+    }
+    .auth-status {
+        gap: 6px;
+        flex-wrap: nowrap;
     }
     .auth-email {
+        display: none;
         max-width: 34vw;
+    }
+    .app-header .js-install-app-btn {
+        display: none !important;
     }
     .card,
     .summary-card,
