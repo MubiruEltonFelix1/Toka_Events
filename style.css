@@ -1527,10 +1527,9 @@ textarea {
     .screen {
         padding-left: 32px;
         padding-right: 32px;
-
-    .dashboard-summary-grid {
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-    }
+        .dashboard-summary-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
     }
     .hero-card {
         min-height: 78vh;
