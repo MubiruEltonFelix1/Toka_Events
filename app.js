@@ -1354,6 +1354,8 @@ function getHostPublishFingerprint(formData) {
   return [
     formData.name,
     formData.category,
+    formData.eventType,
+    formData.deliveryMode,
     formData.date,
     formData.startTime,
     formData.endTime,
@@ -1394,6 +1396,8 @@ function getHostFormData() {
   return {
     name: qs('#host-name')?.value.trim() || '',
     category: qs('#host-category')?.value || 'Music',
+    eventType: qs('#host-event-type')?.value || 'other',
+    deliveryMode: qs('#host-delivery-mode')?.value || 'in-person',
     date: qs('#host-date')?.value || '',
     startTime: qs('#host-start')?.value || '',
     endTime: qs('#host-end')?.value || '',
@@ -1427,6 +1431,7 @@ function renderHostPreview() {
         <h3 class="event-title">${escapeHtml(data.name || 'Your event name')}</h3>
         <p class="event-meta">${escapeHtml(data.date ? formatDate(data.date) : 'Select a date')} · ${escapeHtml(data.startTime || '--:--')} - ${escapeHtml(data.endTime || '--:--')}</p>
         <p class="event-meta">${escapeHtml(data.city || 'City')} · ${escapeHtml(data.venue || 'Venue')}</p>
+        <p class="event-meta">${escapeHtml(data.eventType)} · ${escapeHtml(data.deliveryMode)}</p>
       </div>
     </article>
   `;
@@ -1516,6 +1521,8 @@ function publishEvent() {
       id: `evt-${Date.now()}`,
       name: formData.name,
       category: formData.category,
+      eventType: formData.eventType,
+      deliveryMode: formData.deliveryMode,
       emoji: getEmojiForCategory(formData.category),
       gradient: getGradientForCategory(formData.category),
       date: formData.date,
@@ -1529,7 +1536,7 @@ function publishEvent() {
       registered: 0,
       description: formData.description || 'A new Toka event created by the community.',
       organiser: profile.name || 'You',
-      tags: [formData.category.toLowerCase()],
+      tags: [formData.category.toLowerCase(), formData.eventType, formData.deliveryMode],
       attendees: profile.name ? [profile.name] : [],
       createdBy: 'user',
       thumbnailDataUrl: formData.thumbnailDataUrl || ''
@@ -2124,11 +2131,17 @@ function initializeLandingState(onboardingDone) {
   showScreen(screenFromHash || 'screen-home');
 }
 
-function initApp() {
+async function initApp() {
   bindGlobalEvents();
+  if (typeof window.initializeSupabaseSync === 'function') {
+    await window.initializeSupabaseSync();
+  }
   const onboardingDone = getOnboardingComplete();
   seedMockComments();
   syncCalendarEntriesFromTickets();
+  if (typeof window.runFullSupabaseSync === 'function') {
+    window.runFullSupabaseSync();
+  }
   initializeLandingState(onboardingDone);
   const searchInput = qs('#discover-search');
   if (searchInput) {
@@ -2145,7 +2158,7 @@ function initApp() {
     });
   }
 
-  const hostInputs = ['#host-name', '#host-category', '#host-date', '#host-start', '#host-end', '#host-venue', '#host-city', '#host-price', '#host-capacity', '#host-description'];
+  const hostInputs = ['#host-name', '#host-category', '#host-event-type', '#host-delivery-mode', '#host-date', '#host-start', '#host-end', '#host-venue', '#host-city', '#host-price', '#host-capacity', '#host-description'];
   hostInputs.forEach((selector) => {
     const element = qs(selector);
     if (element) {

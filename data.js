@@ -7,8 +7,461 @@ const TOKA_STORAGE_KEYS = {
     events: 'toka_events',
     referralCode: 'toka_referral_code',
     calendarEntries: 'toka_calendar_entries',
+    eventMetrics: 'toka_event_metrics',
+    deviceId: 'toka_device_id'
+};
+
+const TOKA_SUPABASE_TABLES = {
+    profiles: 'toka_profiles',
+    events: 'toka_events',
+    tickets: 'toka_tickets',
+    comments: 'toka_comments',
+    updates: 'toka_updates',
+    calendarEntries: 'toka_calendar_entries',
     eventMetrics: 'toka_event_metrics'
 };
+
+let TOKA_SUPABASE_CLIENT = null;
+let TOKA_SUPABASE_BOOTSTRAPPED = false;
+let TOKA_SUPABASE_USER_ID = '';
+
+function getDeviceId() {
+    const existing = readStorage(TOKA_STORAGE_KEYS.deviceId, '');
+    if (existing) {
+        return existing;
+    }
+    const nextId = `device-${Date.now()}-${generateRandomSegment(8)}`;
+    writeStorage(TOKA_STORAGE_KEYS.deviceId, nextId);
+    return nextId;
+}
+
+function getSupabaseConfig() {
+    const config = window.TOKA_SUPABASE_CONFIG || {};
+    return {
+        url: String(config.url || '').trim(),
+        anonKey: String(config.anonKey || '').trim()
+    };
+}
+
+function getSupabaseClient() {
+    if (TOKA_SUPABASE_CLIENT) {
+        return TOKA_SUPABASE_CLIENT;
+    }
+
+    if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+        return null;
+    }
+
+    const config = getSupabaseConfig();
+    if (!config.url || !config.anonKey) {
+        return null;
+    }
+
+    TOKA_SUPABASE_CLIENT = window.supabase.createClient(config.url, config.anonKey);
+    return TOKA_SUPABASE_CLIENT;
+}
+
+function getSupabaseOwnerUserId() {
+    return TOKA_SUPABASE_USER_ID || '';
+}
+
+async function ensureSupabaseAuth() {
+    const client = getSupabaseClient();
+    if (!client || !client.auth) {
+        return '';
+    }
+
+    if (TOKA_SUPABASE_USER_ID) {
+        return TOKA_SUPABASE_USER_ID;
+    }
+
+    const { data: sessionData } = await client.auth.getSession();
+    const activeUser = sessionData && sessionData.session && sessionData.session.user;
+    if (activeUser && activeUser.id) {
+        TOKA_SUPABASE_USER_ID = activeUser.id;
+        return TOKA_SUPABASE_USER_ID;
+    }
+
+    const { data: signInData, error } = await client.auth.signInAnonymously();
+    if (error) {
+        return '';
+    }
+
+    TOKA_SUPABASE_USER_ID = signInData && signInData.user && signInData.user.id ? signInData.user.id : '';
+    return TOKA_SUPABASE_USER_ID;
+}
+
+function queueSupabaseWrite(operation) {
+    Promise.resolve()
+        .then(operation)
+        .catch(() => {
+            // Keep UI resilient when offline or Supabase is not configured.
+        });
+}
+
+function mapById(items) {
+    const map = new Map();
+    (items || []).forEach((item) => {
+        if (item && item.id) {
+            map.set(item.id, item);
+        }
+    });
+    return map;
+}
+
+function mergeById(localItems, remoteItems) {
+    const map = mapById(localItems);
+    (remoteItems || []).forEach((item) => {
+        if (item && item.id) {
+            map.set(item.id, item);
+        }
+    });
+    return Array.from(map.values());
+}
+
+function getAllEventIdsKnown() {
+    const ids = new Set();
+    getEvents().forEach((event) => {
+        ids.add(event.id);
+    });
+    return Array.from(ids);
+}
+
+async function supabaseSelect(table) {
+    const client = getSupabaseClient();
+    if (!client) {
+        return [];
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return [];
+    }
+
+    const { data, error } = await client
+        .from(table)
+        .select('*')
+        .eq('owner_user_id', ownerUserId)
+        .eq('device_id', getDeviceId());
+
+    if (error || !Array.isArray(data)) {
+        return [];
+    }
+
+    return data;
+}
+
+function upsertProfileCloud() {
+    const client = getSupabaseClient();
+    if (!client) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    const payload = {
+        device_id: getDeviceId(),
+        owner_user_id: ownerUserId,
+        payload: getUserProfile(),
+        onboarding_complete: getOnboardingComplete(),
+        referral_code: getReferralCode(),
+        updated_at: new Date().toISOString()
+    };
+
+    queueSupabaseWrite(async () => {
+        await client.from(TOKA_SUPABASE_TABLES.profiles).upsert(payload, { onConflict: 'device_id' });
+    });
+}
+
+function upsertEventCloud(event) {
+    const client = getSupabaseClient();
+    if (!client || !event || !event.id) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    const payload = {
+        device_id: getDeviceId(),
+        owner_user_id: ownerUserId,
+        id: event.id,
+        payload: event,
+        updated_at: new Date().toISOString()
+    };
+
+    queueSupabaseWrite(async () => {
+        await client.from(TOKA_SUPABASE_TABLES.events).upsert(payload, { onConflict: 'device_id,id' });
+    });
+}
+
+function upsertTicketCloud(ticket) {
+    const client = getSupabaseClient();
+    if (!client || !ticket || !ticket.id) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    const payload = {
+        device_id: getDeviceId(),
+        owner_user_id: ownerUserId,
+        id: ticket.id,
+        payload: ticket,
+        updated_at: new Date().toISOString()
+    };
+
+    queueSupabaseWrite(async () => {
+        await client.from(TOKA_SUPABASE_TABLES.tickets).upsert(payload, { onConflict: 'device_id,id' });
+    });
+}
+
+function upsertCommentCloud(eventId, comment) {
+    const client = getSupabaseClient();
+    if (!client || !eventId || !comment || !comment.id) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    const payload = {
+        device_id: getDeviceId(),
+        owner_user_id: ownerUserId,
+        id: comment.id,
+        event_id: eventId,
+        payload: comment,
+        updated_at: new Date().toISOString()
+    };
+
+    queueSupabaseWrite(async () => {
+        await client.from(TOKA_SUPABASE_TABLES.comments).upsert(payload, { onConflict: 'device_id,id' });
+    });
+}
+
+function upsertUpdateCloud(eventId, update) {
+    const client = getSupabaseClient();
+    if (!client || !eventId || !update || !update.id) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    const payload = {
+        device_id: getDeviceId(),
+        owner_user_id: ownerUserId,
+        id: update.id,
+        event_id: eventId,
+        payload: update,
+        updated_at: new Date().toISOString()
+    };
+
+    queueSupabaseWrite(async () => {
+        await client.from(TOKA_SUPABASE_TABLES.updates).upsert(payload, { onConflict: 'device_id,id' });
+    });
+}
+
+function upsertCalendarEntryCloud(entry) {
+    const client = getSupabaseClient();
+    if (!client || !entry || !entry.eventId) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    const payload = {
+        device_id: getDeviceId(),
+        owner_user_id: ownerUserId,
+        event_id: entry.eventId,
+        payload: entry,
+        updated_at: new Date().toISOString()
+    };
+
+    queueSupabaseWrite(async () => {
+        await client.from(TOKA_SUPABASE_TABLES.calendarEntries).upsert(payload, { onConflict: 'device_id,event_id' });
+    });
+}
+
+function upsertEventMetricCloud(eventId, metric) {
+    const client = getSupabaseClient();
+    if (!client || !eventId || !metric) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    const payload = {
+        device_id: getDeviceId(),
+        owner_user_id: ownerUserId,
+        event_id: eventId,
+        payload: metric,
+        updated_at: new Date().toISOString()
+    };
+
+    queueSupabaseWrite(async () => {
+        await client.from(TOKA_SUPABASE_TABLES.eventMetrics).upsert(payload, { onConflict: 'device_id,event_id' });
+    });
+}
+
+async function pullSupabaseIntoLocalStorage() {
+    const client = getSupabaseClient();
+    if (!client) {
+        return;
+    }
+
+    const [profileRows, eventRows, ticketRows, commentRows, updateRows, calendarRows, metricRows] = await Promise.all([
+        supabaseSelect(TOKA_SUPABASE_TABLES.profiles),
+        supabaseSelect(TOKA_SUPABASE_TABLES.events),
+        supabaseSelect(TOKA_SUPABASE_TABLES.tickets),
+        supabaseSelect(TOKA_SUPABASE_TABLES.comments),
+        supabaseSelect(TOKA_SUPABASE_TABLES.updates),
+        supabaseSelect(TOKA_SUPABASE_TABLES.calendarEntries),
+        supabaseSelect(TOKA_SUPABASE_TABLES.eventMetrics)
+    ]);
+
+    const remoteProfile = profileRows[0] || null;
+    if (remoteProfile && remoteProfile.payload) {
+        const localProfile = getUserProfile();
+        writeStorage(TOKA_STORAGE_KEYS.userProfile, { ...localProfile, ...remoteProfile.payload });
+        setOnboardingComplete(Boolean(remoteProfile.onboarding_complete));
+        if (remoteProfile.referral_code) {
+            setReferralCode(remoteProfile.referral_code);
+        }
+    }
+
+    const remoteEvents = eventRows.map((row) => row.payload).filter(Boolean);
+    if (remoteEvents.length) {
+        writeStorage(TOKA_STORAGE_KEYS.events, mergeById(getSavedEvents(), remoteEvents));
+    }
+
+    const remoteTickets = ticketRows.map((row) => row.payload).filter(Boolean);
+    if (remoteTickets.length) {
+        writeStorage(TOKA_STORAGE_KEYS.tickets, mergeById(getTickets(), remoteTickets));
+    }
+
+    const remoteCalendarEntries = calendarRows.map((row) => row.payload).filter(Boolean);
+    if (remoteCalendarEntries.length) {
+        const localMap = new Map(getCalendarEntries().map((entry) => [entry.eventId, entry]));
+        remoteCalendarEntries.forEach((entry) => {
+            if (entry && entry.eventId) {
+                localMap.set(entry.eventId, entry);
+            }
+        });
+        writeStorage(TOKA_STORAGE_KEYS.calendarEntries, Array.from(localMap.values()));
+    }
+
+    const remoteMetrics = metricRows.reduce((accumulator, row) => {
+        if (row && row.event_id && row.payload) {
+            accumulator[row.event_id] = row.payload;
+        }
+        return accumulator;
+    }, {});
+    if (Object.keys(remoteMetrics).length) {
+        writeStorage(TOKA_STORAGE_KEYS.eventMetrics, {
+            ...getEventMetrics(),
+            ...remoteMetrics
+        });
+    }
+
+    const remoteCommentsByEvent = {};
+    commentRows.forEach((row) => {
+        if (!row || !row.event_id || !row.payload) {
+            return;
+        }
+        if (!remoteCommentsByEvent[row.event_id]) {
+            remoteCommentsByEvent[row.event_id] = [];
+        }
+        remoteCommentsByEvent[row.event_id].push(row.payload);
+    });
+    Object.keys(remoteCommentsByEvent).forEach((eventId) => {
+        const merged = mergeById(getComments(eventId), remoteCommentsByEvent[eventId]);
+        localStorage.setItem('toka_comments_' + eventId, JSON.stringify(merged));
+    });
+
+    const remoteUpdatesByEvent = {};
+    updateRows.forEach((row) => {
+        if (!row || !row.event_id || !row.payload) {
+            return;
+        }
+        if (!remoteUpdatesByEvent[row.event_id]) {
+            remoteUpdatesByEvent[row.event_id] = [];
+        }
+        remoteUpdatesByEvent[row.event_id].push(row.payload);
+    });
+    Object.keys(remoteUpdatesByEvent).forEach((eventId) => {
+        const localUpdates = getUpdates(eventId);
+        const mergedById = new Map(localUpdates.map((item) => [item.id, item]));
+        remoteUpdatesByEvent[eventId].forEach((item) => {
+            if (item && item.id) {
+                mergedById.set(item.id, item);
+            }
+        });
+        localStorage.setItem('toka_updates_' + eventId, JSON.stringify(Array.from(mergedById.values())));
+    });
+}
+
+function pushLocalSnapshotToSupabase() {
+    if (!getSupabaseClient()) {
+        return;
+    }
+
+    upsertProfileCloud();
+    getSavedEvents().forEach((event) => upsertEventCloud(event));
+    getTickets().forEach((ticket) => upsertTicketCloud(ticket));
+    getCalendarEntries().forEach((entry) => upsertCalendarEntryCloud(entry));
+
+    const metrics = getEventMetrics();
+    Object.keys(metrics).forEach((eventId) => {
+        upsertEventMetricCloud(eventId, metrics[eventId]);
+    });
+
+    getAllEventIdsKnown().forEach((eventId) => {
+        getComments(eventId).forEach((comment) => upsertCommentCloud(eventId, comment));
+        getUpdates(eventId).forEach((update) => upsertUpdateCloud(eventId, update));
+    });
+}
+
+async function initializeSupabaseSync() {
+    if (TOKA_SUPABASE_BOOTSTRAPPED) {
+        return Boolean(getSupabaseClient());
+    }
+    TOKA_SUPABASE_BOOTSTRAPPED = true;
+
+    if (!getSupabaseClient()) {
+        return false;
+    }
+
+    await ensureSupabaseAuth();
+    if (!getSupabaseOwnerUserId()) {
+        return false;
+    }
+
+    await pullSupabaseIntoLocalStorage();
+    pushLocalSnapshotToSupabase();
+    return true;
+}
+
+window.initializeSupabaseSync = initializeSupabaseSync;
+window.runFullSupabaseSync = pushLocalSnapshotToSupabase;
 
 const TOKA_PUBLIC_HOLIDAYS = [
     { id: 'hol-2026-01-01', date: '2026-01-01', name: "New Year's Day", scope: 'National' },
@@ -255,6 +708,7 @@ function saveTicket(ticket) {
         tickets.unshift(ticket);
     }
     writeStorage(TOKA_STORAGE_KEYS.tickets, tickets);
+    upsertTicketCloud(ticket);
     return ticket;
 }
 
@@ -271,6 +725,7 @@ function saveEvent(event) {
         events.unshift(event);
     }
     writeStorage(TOKA_STORAGE_KEYS.events, events);
+    upsertEventCloud(event);
     return event;
 }
 
@@ -304,6 +759,7 @@ function saveUserProfile(profile) {
     const currentProfile = getUserProfile();
     const nextProfile = {...currentProfile, ...profile };
     writeStorage(TOKA_STORAGE_KEYS.userProfile, nextProfile);
+    upsertProfileCloud();
     return nextProfile;
 }
 
@@ -346,6 +802,7 @@ function setOnboardingComplete(isComplete) {
     } catch (error) {
         return false;
     }
+    upsertProfileCloud();
     return true;
 }
 
@@ -363,6 +820,7 @@ function setReferralCode(code) {
     } catch (error) {
         return false;
     }
+    upsertProfileCloud();
     return true;
 }
 
@@ -383,6 +841,7 @@ function saveComment(eventId, comment) {
     const comments = getComments(eventId);
     comments.push(comment);
     localStorage.setItem('toka_comments_' + eventId, JSON.stringify(comments));
+    upsertCommentCloud(eventId, comment);
 }
 
 function getUpdates(eventId) {
@@ -398,6 +857,7 @@ function saveUpdate(eventId, update) {
     const updates = getUpdates(eventId);
     updates.push(update);
     localStorage.setItem('toka_updates_' + eventId, JSON.stringify(updates));
+    upsertUpdateCloud(eventId, update);
 }
 
 function toggleLike(eventId, commentId) {
@@ -425,6 +885,7 @@ function toggleLike(eventId, commentId) {
     }
 
     localStorage.setItem('toka_comments_' + eventId, JSON.stringify(comments));
+    upsertCommentCloud(eventId, comment);
     return comment.likes;
 }
 
@@ -538,6 +999,7 @@ function saveCalendarEntry(entry) {
     }
 
     writeStorage(TOKA_STORAGE_KEYS.calendarEntries, entries);
+    upsertCalendarEntryCloud(nextEntry);
     return nextEntry;
 }
 
@@ -588,6 +1050,10 @@ function getEventMetrics() {
 
 function saveEventMetrics(metrics) {
     writeStorage(TOKA_STORAGE_KEYS.eventMetrics, metrics || {});
+    const safeMetrics = metrics || {};
+    Object.keys(safeMetrics).forEach((eventId) => {
+        upsertEventMetricCloud(eventId, safeMetrics[eventId]);
+    });
 }
 
 function getEventMetric(eventId) {

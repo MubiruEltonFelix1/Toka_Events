@@ -289,24 +289,20 @@ From a jazz evening at a Kampala rooftop to a university debate competition in M
 
 <br/>
 
-## 🛠️ Run It Yourself
+## 📚 Documentation
 
 <br/>
 
-Toka's MVP is intentionally simple. No complicated setup. No special software. Just three steps:
+The main README stays focused on product story, vision, and project overview.
 
-```bash
-# 1. Get the code
-git clone https://github.com/yourusername/toka.git
+Detailed implementation and technical docs now live in the docs folder:
 
-# 2. Enter the folder
-cd toka
-
-# 3. Open in your browser
-open index.html
-```
-
-That is it. Everything runs in the browser. No internet required after the first load. No accounts to create on other platforms. No API keys to configure. Just open and use.
+- [Documentation Index](docs/README.md)
+- [Setup Guide](docs/SETUP.md)
+- [Supabase Guide](docs/SUPABASE.md)
+- [ML Data & Training Notes](docs/ML_DATA.md)
+- [Security & Access Policies](docs/SECURITY.md)
+- [Architecture Notes](docs/ARCHITECTURE.md)
 
 <br/>
 

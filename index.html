@@ -412,6 +412,30 @@
                             </div>
                             <div class="register-two-col">
                                 <div class="field-group">
+                                    <label for="host-event-type">Event Type *</label>
+                                    <select id="host-event-type">
+                  <option value="concert">Concert</option>
+                  <option value="conference">Conference</option>
+                  <option value="workshop">Workshop</option>
+                  <option value="meetup">Meetup</option>
+                  <option value="festival">Festival</option>
+                  <option value="sports-match">Sports Match</option>
+                  <option value="community-drive">Community Drive</option>
+                  <option value="worship-gathering">Worship Gathering</option>
+                  <option value="other">Other</option>
+                </select>
+                                </div>
+                                <div class="field-group">
+                                    <label for="host-delivery-mode">Delivery Mode *</label>
+                                    <select id="host-delivery-mode">
+                  <option value="in-person">In-Person</option>
+                  <option value="virtual">Virtual</option>
+                  <option value="hybrid">Hybrid</option>
+                </select>
+                                </div>
+                            </div>
+                            <div class="register-two-col">
+                                <div class="field-group">
                                     <label for="host-date">Date *</label>
                                     <input id="host-date" type="date" />
                                 </div>
@@ -585,6 +609,8 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="supabase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="data.js"></script>
     <script src="app.js"></script>
 </body>
