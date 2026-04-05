@@ -434,68 +434,68 @@ function getEventById(eventId) {
 }
 
 function isEventPast(event) {
-  if (!event || !event.date) {
-    return false;
-  }
+    if (!event || !event.date) {
+        return false;
+    }
 
-  const eventDate = new Date(`${event.date}T12:00:00`);
-  if (Number.isNaN(eventDate.getTime())) {
-    return false;
-  }
+    const eventDate = new Date(`${event.date}T12:00:00`);
+    if (Number.isNaN(eventDate.getTime())) {
+        return false;
+    }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return eventDate < today;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return eventDate < today;
 }
 
 function getTicketQrPayload(ticket, event) {
-  const safeEvent = event || {};
-  return JSON.stringify({
-    ticketCode: ticket.ticketCode,
-    attendee: ticket.fullName,
-    eventId: ticket.eventId,
-    eventName: safeEvent.name || '',
-    date: safeEvent.date || '',
-    time: safeEvent.time || '',
-    venue: safeEvent.venue || ''
-  });
+    const safeEvent = event || {};
+    return JSON.stringify({
+        ticketCode: ticket.ticketCode,
+        attendee: ticket.fullName,
+        eventId: ticket.eventId,
+        eventName: safeEvent.name || '',
+        date: safeEvent.date || '',
+        time: safeEvent.time || '',
+        venue: safeEvent.venue || ''
+    });
 }
 
 function renderQrCode(container, payload) {
-  if (!container) {
-    return;
-  }
-
-  container.innerHTML = '';
-  container.dataset.qrPayload = payload;
-
-  if (window.QRCode && typeof window.QRCode === 'function') {
-    try {
-      const qr = new window.QRCode(container, {
-        text: payload,
-        width: 160,
-        height: 160,
-        colorDark: '#0D0D0D',
-        colorLight: '#FAF7F2',
-        correctLevel: window.QRCode.CorrectLevel.M
-      });
-
-      if (qr && typeof qr.makeCode === 'function') {
-        qr.makeCode(payload);
+    if (!container) {
         return;
-      }
-    } catch (error) {
-      console.warn('QR render failed', error);
     }
-  }
 
-  container.innerHTML = `<div class="qr-fallback"><div class="qr-mark">T</div><small>QR unavailable</small></div>`;
+    container.innerHTML = '';
+    container.dataset.qrPayload = payload;
+
+    if (window.QRCode && typeof window.QRCode === 'function') {
+        try {
+            const qr = new window.QRCode(container, {
+                text: payload,
+                width: 160,
+                height: 160,
+                colorDark: '#0D0D0D',
+                colorLight: '#FAF7F2',
+                correctLevel: window.QRCode.CorrectLevel.M
+            });
+
+            if (qr && typeof qr.makeCode === 'function') {
+                qr.makeCode(payload);
+                return;
+            }
+        } catch (error) {
+            console.warn('QR render failed', error);
+        }
+    }
+
+    container.innerHTML = `<div class="qr-fallback"><div class="qr-mark">T</div><small>QR unavailable</small></div>`;
 }
 
 function getSharableEventCardMarkup(event) {
-  const thumbnail = getEventThumbnail(event);
-  const hostName = escapeHtml(event.organiser || 'Toka Host');
-  return `
+    const thumbnail = getEventThumbnail(event);
+    const hostName = escapeHtml(event.organiser || 'Toka Host');
+    return `
     <article class="share-card" style="--share-card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
     <div class="share-card-cover">
       <img class="share-card-image" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} cover image" loading="lazy" decoding="async" />
@@ -546,7 +546,7 @@ function getEventThumbnail(event) {
 }
 
 function getUpcomingEvents(count = 3) {
-  return getEvents().filter((event) => !isEventPast(event)).slice(0, count);
+    return getEvents().filter((event) => !isEventPast(event)).slice(0, count);
 }
 
 function toast(message) {
@@ -823,7 +823,7 @@ function renderEventCards(events, container, options = {}) {
 }
 
 function getTrendingEvents(limit = 8) {
-  const events = getEvents().filter((event) => !isEventPast(event));
+    const events = getEvents().filter((event) => !isEventPast(event));
     const now = Date.now();
     const fortyEightHoursAgo = now - (48 * 60 * 60 * 1000);
 
@@ -939,10 +939,10 @@ function renderDetailScreen(event) {
     `;
     }
     if (ticketButton) {
-      const eventEnded = isEventPast(event);
-      ticketButton.textContent = eventEnded ? 'Ticket sales closed' : (event.price > 0 ? `Get Ticket · ${formatPrice(event.price, event.currency)}` : 'Get Free Ticket');
-      ticketButton.disabled = eventEnded;
-      ticketButton.setAttribute('aria-disabled', String(eventEnded));
+        const eventEnded = isEventPast(event);
+        ticketButton.textContent = eventEnded ? 'Ticket sales closed' : (event.price > 0 ? `Get Ticket · ${formatPrice(event.price, event.currency)}` : 'Get Free Ticket');
+        ticketButton.disabled = eventEnded;
+        ticketButton.setAttribute('aria-disabled', String(eventEnded));
     }
     const calendarButton = qs('#detail-calendar-button');
     if (calendarButton) {
