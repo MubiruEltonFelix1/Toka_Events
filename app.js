@@ -128,104 +128,104 @@ function getAuthEmailLabel() {
 }
 
 function isStandalonePwa() {
-  const standaloneMatch = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
-  const iosStandalone = Boolean(window.navigator && window.navigator.standalone);
-  return Boolean(standaloneMatch || iosStandalone);
+    const standaloneMatch = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+    const iosStandalone = Boolean(window.navigator && window.navigator.standalone);
+    return Boolean(standaloneMatch || iosStandalone);
 }
 
 function isIosSafariInstallPath() {
-  const ua = window.navigator.userAgent || '';
-  const isIos = /iphone|ipad|ipod/i.test(ua);
-  const isSafari = /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
-  return Boolean(isIos && isSafari);
+    const ua = window.navigator.userAgent || '';
+    const isIos = /iphone|ipad|ipod/i.test(ua);
+    const isSafari = /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
+    return Boolean(isIos && isSafari);
 }
 
 function getInstallPromptDismissedAt() {
-  const rawValue = window.localStorage.getItem(TOKA_PWA_STORAGE_KEYS.installPromptDismissedAt);
-  const parsed = Number(rawValue || 0);
-  return Number.isFinite(parsed) ? parsed : 0;
+    const rawValue = window.localStorage.getItem(TOKA_PWA_STORAGE_KEYS.installPromptDismissedAt);
+    const parsed = Number(rawValue || 0);
+    return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function setInstallPromptDismissedNow() {
-  window.localStorage.setItem(TOKA_PWA_STORAGE_KEYS.installPromptDismissedAt, String(Date.now()));
+    window.localStorage.setItem(TOKA_PWA_STORAGE_KEYS.installPromptDismissedAt, String(Date.now()));
 }
 
 function shouldShowInstallCta() {
-  if (isStandalonePwa()) {
-    return false;
-  }
+    if (isStandalonePwa()) {
+        return false;
+    }
 
-  const lastDismissedAt = getInstallPromptDismissedAt();
-  if (lastDismissedAt && Date.now() - lastDismissedAt < TOKA_PWA_INSTALL_PROMPT_COOLDOWN_MS) {
-    return false;
-  }
+    const lastDismissedAt = getInstallPromptDismissedAt();
+    if (lastDismissedAt && Date.now() - lastDismissedAt < TOKA_PWA_INSTALL_PROMPT_COOLDOWN_MS) {
+        return false;
+    }
 
-  return Boolean(TOKA_PWA_STATE.deferredInstallPrompt || isIosSafariInstallPath());
+    return Boolean(TOKA_PWA_STATE.deferredInstallPrompt || isIosSafariInstallPath());
 }
 
 function updateInstallCtaVisibility() {
-  const shouldShow = shouldShowInstallCta();
-  qsa('.js-install-app-btn').forEach((button) => {
-    button.classList.toggle('hidden', !shouldShow);
-  });
+    const shouldShow = shouldShowInstallCta();
+    qsa('.js-install-app-btn').forEach((button) => {
+        button.classList.toggle('hidden', !shouldShow);
+    });
 }
 
 async function promptInstallApp() {
-  if (isStandalonePwa()) {
-    toast('Toka is already installed on this device.');
-    return;
-  }
-
-  if (TOKA_PWA_STATE.deferredInstallPrompt) {
-    const installEvent = TOKA_PWA_STATE.deferredInstallPrompt;
-    installEvent.prompt();
-    const choice = await installEvent.userChoice;
-    TOKA_PWA_STATE.deferredInstallPrompt = null;
-    if (choice && choice.outcome === 'accepted') {
-      toast('Installing Toka...');
-    } else {
-      setInstallPromptDismissedNow();
+    if (isStandalonePwa()) {
+        toast('Toka is already installed on this device.');
+        return;
     }
-    updateInstallCtaVisibility();
-    return;
-  }
 
-  if (isIosSafariInstallPath()) {
-    window.alert('Install Toka on iPhone/iPad:\n1) Tap Share in Safari\n2) Choose Add to Home Screen\n3) Tap Add');
-    setInstallPromptDismissedNow();
-    updateInstallCtaVisibility();
-    return;
-  }
+    if (TOKA_PWA_STATE.deferredInstallPrompt) {
+        const installEvent = TOKA_PWA_STATE.deferredInstallPrompt;
+        installEvent.prompt();
+        const choice = await installEvent.userChoice;
+        TOKA_PWA_STATE.deferredInstallPrompt = null;
+        if (choice && choice.outcome === 'accepted') {
+            toast('Installing Toka...');
+        } else {
+            setInstallPromptDismissedNow();
+        }
+        updateInstallCtaVisibility();
+        return;
+    }
 
-  toast('Install is not available yet in this browser.');
+    if (isIosSafariInstallPath()) {
+        window.alert('Install Toka on iPhone/iPad:\n1) Tap Share in Safari\n2) Choose Add to Home Screen\n3) Tap Add');
+        setInstallPromptDismissedNow();
+        updateInstallCtaVisibility();
+        return;
+    }
+
+    toast('Install is not available yet in this browser.');
 }
 
 function registerPwaInstallHandlers() {
-  window.addEventListener('beforeinstallprompt', (event) => {
-    event.preventDefault();
-    TOKA_PWA_STATE.deferredInstallPrompt = event;
-    updateInstallCtaVisibility();
-  });
+    window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        TOKA_PWA_STATE.deferredInstallPrompt = event;
+        updateInstallCtaVisibility();
+    });
 
-  window.addEventListener('appinstalled', () => {
-    TOKA_PWA_STATE.deferredInstallPrompt = null;
-    updateInstallCtaVisibility();
-    toast('Toka installed successfully.');
-  });
+    window.addEventListener('appinstalled', () => {
+        TOKA_PWA_STATE.deferredInstallPrompt = null;
+        updateInstallCtaVisibility();
+        toast('Toka installed successfully.');
+    });
 }
 
 async function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) {
-    return;
-  }
+    if (!('serviceWorker' in navigator)) {
+        return;
+    }
 
-  try {
-    const path = window.location.pathname || '/';
-    const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-    await navigator.serviceWorker.register(`${basePath}sw.js?v=20260405-1`, { scope: basePath });
-  } catch (error) {
-    console.warn('Service worker registration failed', error);
-  }
+    try {
+        const path = window.location.pathname || '/';
+        const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
+        await navigator.serviceWorker.register(`${basePath}sw.js?v=20260405-1`, { scope: basePath });
+    } catch (error) {
+        console.warn('Service worker registration failed', error);
+    }
 }
 
 function setAuthFeedback(message, type = 'error') {
