@@ -20,7 +20,8 @@ const TOKA_APP_STATE = {
     hostChartInstances: {},
     isPublishingHostEvent: false,
     lastPublishedFingerprint: '',
-    lastPublishedAt: 0
+    lastPublishedAt: 0,
+    postOnboardingScreen: ''
 };
 
 const TOKA_HOST_PUBLISH_DUPLICATE_WINDOW_MS = 12000;
@@ -41,7 +42,8 @@ const TOKA_PROTECTED_SCREENS = new Set([
     'screen-my-tickets',
     'screen-profile',
     'screen-host',
-    'screen-host-dashboard'
+  'screen-host-dashboard',
+  'screen-register'
 ]);
 
 window.TOKA_AUTH_STATE = TOKA_AUTH_STATE;
@@ -89,6 +91,12 @@ function getAvatarColor(name) {
 
 function isAuthenticatedUser() {
     return Boolean(TOKA_AUTH_STATE.isAuthenticated && TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id);
+}
+
+function hasCompletedUserProfile() {
+  const profile = getUserProfile() || {};
+  const interests = Array.isArray(profile.interests) ? profile.interests : [];
+  return Boolean(getOnboardingComplete() && profile.name && profile.phone && interests.length);
 }
 
 function getAuthRedirectUrl() {
@@ -489,6 +497,13 @@ function showScreen(screenId) {
         return;
     }
 
+  if (TOKA_PROTECTED_SCREENS.has(screenId) && isAuthenticatedUser() && !hasCompletedUserProfile()) {
+    TOKA_APP_STATE.postOnboardingScreen = screenId;
+    startOnboarding();
+    toast('Complete onboarding to continue.');
+    return;
+  }
+
     TOKA_APP_STATE.currentScreen = screenId;
     qsa('.screen').forEach((screen) => {
         screen.classList.toggle('active', screen.id === screenId);
@@ -884,6 +899,20 @@ function saveSelectedEventToCalendar(withTicket) {
   if (!TOKA_APP_STATE.selectedEventId) {
     return;
   }
+
+  if (!isAuthenticatedUser()) {
+    TOKA_AUTH_STATE.pendingScreenId = 'screen-calendar';
+    openAuthModal('signin', 'Sign in to save events to your calendar.');
+    return;
+  }
+
+  if (!hasCompletedUserProfile()) {
+    TOKA_APP_STATE.postOnboardingScreen = 'screen-calendar';
+    startOnboarding();
+    toast('Complete onboarding to unlock calendar.');
+    return;
+  }
+
   saveEventToCalendar(TOKA_APP_STATE.selectedEventId, withTicket);
 }
 
@@ -1230,6 +1259,20 @@ function shakeElement(element) {
 function openRegistration(eventId) {
   const event = getEventById(eventId || TOKA_APP_STATE.selectedEventId);
   if (!event) {
+    return;
+  }
+
+  if (!isAuthenticatedUser()) {
+    TOKA_AUTH_STATE.pendingScreenId = 'screen-register';
+    openAuthModal('signin', 'Sign in to register and get your ticket.');
+    return;
+  }
+
+  if (!hasCompletedUserProfile()) {
+    TOKA_APP_STATE.postOnboardingScreen = 'screen-register';
+    TOKA_APP_STATE.selectedRegisterEventId = event.id;
+    startOnboarding();
+    toast('Complete onboarding before getting tickets.');
     return;
   }
 
@@ -2293,6 +2336,12 @@ function closeCalendarEventModal() {
 }
 
 function startOnboarding() {
+  if (!isAuthenticatedUser()) {
+    TOKA_AUTH_STATE.pendingScreenId = TOKA_APP_STATE.postOnboardingScreen || TOKA_AUTH_STATE.pendingScreenId || 'screen-home';
+    openAuthModal('signin', 'Sign in first, then complete onboarding.');
+    return;
+  }
+
   TOKA_APP_STATE.onboardingStep = 1;
   renderOnboarding();
   showScreen('screen-onboarding');
@@ -2386,7 +2435,10 @@ function goOnboardingNext() {
   renderDiscover();
   renderTickets();
   renderProfile();
-  showScreen('screen-home');
+  const nextScreen = TOKA_APP_STATE.postOnboardingScreen || TOKA_AUTH_STATE.pendingScreenId || 'screen-home';
+  TOKA_APP_STATE.postOnboardingScreen = '';
+  TOKA_AUTH_STATE.pendingScreenId = '';
+  showScreen(nextScreen);
   toast('Welcome to Toka.');
 }
 
@@ -2531,14 +2583,7 @@ function bindGlobalEvents() {
   });
 }
 
-function initializeLandingState(onboardingDone) {
-  const isOnboardingDone = typeof onboardingDone === 'boolean' ? onboardingDone : getOnboardingComplete();
-  if (!isOnboardingDone) {
-    renderOnboarding();
-    showScreen('screen-onboarding');
-    return;
-  }
-
+function initializeLandingState() {
   if (!getReferralCode()) {
     const profile = getUserProfile();
     if (profile.name) {
@@ -2578,13 +2623,12 @@ async function initApp() {
     await window.initializeSupabaseSync();
   }
 
-  const onboardingDone = getOnboardingComplete();
   seedMockComments();
   syncCalendarEntriesFromTickets();
   if (TOKA_AUTH_STATE.isAuthenticated && typeof window.runFullSupabaseSync === 'function') {
     window.runFullSupabaseSync();
   }
-  initializeLandingState(onboardingDone);
+  initializeLandingState();
   const searchInput = qs('#discover-search');
   if (searchInput) {
     searchInput.value = TOKA_APP_STATE.discoverQuery;
