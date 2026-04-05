@@ -374,9 +374,6 @@ async function applyAuthSession(session) {
 
     if (TOKA_AUTH_STATE.isAuthenticated && typeof window.initializeSupabaseSync === 'function') {
         await window.initializeSupabaseSync();
-        if (typeof window.runFullSupabaseSync === 'function') {
-            window.runFullSupabaseSync();
-        }
     }
 
     if (!TOKA_AUTH_STATE.isAuthenticated && TOKA_PROTECTED_SCREENS.has(TOKA_APP_STATE.currentScreen)) {
@@ -2682,9 +2679,6 @@ async function initApp() {
 
   seedMockComments();
   syncCalendarEntriesFromTickets();
-  if (TOKA_AUTH_STATE.isAuthenticated && typeof window.runFullSupabaseSync === 'function') {
-    window.runFullSupabaseSync();
-  }
   initializeLandingState();
   const searchInput = qs('#discover-search');
   if (searchInput) {

@@ -8,7 +8,9 @@ const TOKA_STORAGE_KEYS = {
     referralCode: 'toka_referral_code',
     calendarEntries: 'toka_calendar_entries',
     eventMetrics: 'toka_event_metrics',
-    deviceId: 'toka_device_id'
+    deviceId: 'toka_device_id',
+    eventsSyncCursor: 'toka_events_sync_cursor',
+    pendingEventSyncIds: 'toka_pending_event_sync_ids'
 };
 
 const TOKA_SUPABASE_TABLES = {
@@ -25,6 +27,7 @@ let TOKA_SUPABASE_CLIENT = null;
 let TOKA_SUPABASE_BOOTSTRAPPED = false;
 let TOKA_SUPABASE_USER_ID = '';
 let TOKA_SUPABASE_SYNC_INTERVAL_ID = null;
+let TOKA_SUPABASE_EVENTS_CHANNEL = null;
 const TOKA_SUPABASE_SYNC_INTERVAL_MS = 20000;
 
 function reportSupabaseError(context, error) {
@@ -48,6 +51,46 @@ function getDeviceId() {
     const nextId = `device-${Date.now()}-${generateRandomSegment(8)}`;
     writeStorage(TOKA_STORAGE_KEYS.deviceId, nextId);
     return nextId;
+}
+
+function getEventsSyncCursor() {
+    const cursor = readStorage(TOKA_STORAGE_KEYS.eventsSyncCursor, '');
+    return typeof cursor === 'string' ? cursor : '';
+}
+
+function setEventsSyncCursor(cursor) {
+    if (!cursor || typeof cursor !== 'string') {
+        return;
+    }
+    writeStorage(TOKA_STORAGE_KEYS.eventsSyncCursor, cursor);
+}
+
+function getPendingEventSyncIds() {
+    const ids = readStorage(TOKA_STORAGE_KEYS.pendingEventSyncIds, []);
+    return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && id) : [];
+}
+
+function setPendingEventSyncIds(ids) {
+    writeStorage(TOKA_STORAGE_KEYS.pendingEventSyncIds, Array.from(new Set(ids || [])));
+}
+
+function markPendingEventSync(eventId) {
+    if (!eventId) {
+        return;
+    }
+    const ids = getPendingEventSyncIds();
+    if (!ids.includes(eventId)) {
+        ids.push(eventId);
+        setPendingEventSyncIds(ids);
+    }
+}
+
+function clearPendingEventSync(eventId) {
+    if (!eventId) {
+        return;
+    }
+    const nextIds = getPendingEventSyncIds().filter((id) => id !== eventId);
+    setPendingEventSyncIds(nextIds);
 }
 
 function getSupabaseConfig() {
@@ -164,7 +207,7 @@ async function supabaseSelect(table) {
     return data;
 }
 
-async function supabaseSelectSharedEvents() {
+async function supabaseSelectSharedEvents(sinceTimestamp = '') {
     const client = getSupabaseClient();
     if (!client) {
         return [];
@@ -175,9 +218,16 @@ async function supabaseSelectSharedEvents() {
         return [];
     }
 
-    const { data, error } = await client
+    let query = client
         .from(TOKA_SUPABASE_TABLES.events)
-        .select('*');
+        .select('*')
+        .order('updated_at', { ascending: true });
+
+    if (sinceTimestamp) {
+        query = query.gt('updated_at', sinceTimestamp);
+    }
+
+    const { data, error } = await query;
 
     if (error || !Array.isArray(data)) {
         if (error) {
@@ -249,15 +299,16 @@ function upsertProfileCloud() {
     });
 }
 
-function upsertEventCloud(event) {
+async function upsertEventCloudImmediate(event) {
     const client = getSupabaseClient();
     if (!client || !event || !event.id) {
-        return;
+        return false;
     }
 
     const ownerUserId = getSupabaseOwnerUserId();
     if (!ownerUserId) {
-        return;
+        markPendingEventSync(event.id);
+        return false;
     }
 
     const payload = {
@@ -268,8 +319,28 @@ function upsertEventCloud(event) {
         updated_at: new Date().toISOString()
     };
 
+    try {
+        const { error } = await client.from(TOKA_SUPABASE_TABLES.events).upsert(payload, { onConflict: 'device_id,id' });
+        if (error) {
+            reportSupabaseError('upsert.events', error);
+            markPendingEventSync(event.id);
+            return false;
+        }
+        clearPendingEventSync(event.id);
+        return true;
+    } catch (error) {
+        reportSupabaseError('upsert.events', error);
+        markPendingEventSync(event.id);
+        return false;
+    }
+}
+
+function upsertEventCloud(event) {
+    if (!event || !event.id) {
+        return;
+    }
     queueSupabaseWrite(async() => {
-        await client.from(TOKA_SUPABASE_TABLES.events).upsert(payload, { onConflict: 'device_id,id' });
+        await upsertEventCloudImmediate(event);
     });
 }
 
@@ -499,16 +570,69 @@ function notifyCloudEventsUpdated() {
     window.dispatchEvent(new CustomEvent('toka:cloud-events-updated'));
 }
 
-async function syncSharedEventsFromCloud() {
+function updateEventsSyncCursorFromRows(rows) {
+    const currentCursor = getEventsSyncCursor();
+    const currentCursorTime = Date.parse(currentCursor);
+    let maxTimestamp = Number.isFinite(currentCursorTime) ? currentCursorTime : 0;
+
+    (rows || []).forEach((row) => {
+        const rowTs = getRowUpdatedAt(row);
+        if (rowTs > maxTimestamp) {
+            maxTimestamp = rowTs;
+        }
+    });
+
+    if (maxTimestamp > 0) {
+        setEventsSyncCursor(new Date(maxTimestamp).toISOString());
+    }
+}
+
+function mergeRemoteEventRowsIntoLocal(eventRows) {
+    updateEventsSyncCursorFromRows(eventRows);
+    const remoteEvents = pickLatestRowsByKey(eventRows, 'id').map((row) => row.payload).filter(Boolean);
+    if (!remoteEvents.length) {
+        return false;
+    }
+
+    const previous = getSavedEvents();
+    const merged = mergeById(previous, remoteEvents);
+    if (JSON.stringify(previous) === JSON.stringify(merged)) {
+        return false;
+    }
+
+    writeStorage(TOKA_STORAGE_KEYS.events, merged);
+    return true;
+}
+
+async function flushPendingEventSyncQueue() {
+    const pendingIds = getPendingEventSyncIds();
+    if (!pendingIds.length) {
+        return;
+    }
+
+    const localEventMap = new Map(getSavedEvents().map((event) => [event.id, event]));
+    for (const eventId of pendingIds) {
+        const event = localEventMap.get(eventId);
+        if (!event) {
+            clearPendingEventSync(eventId);
+            continue;
+        }
+        await upsertEventCloudImmediate(event);
+    }
+}
+
+async function syncSharedEventsFromCloud(options = {}) {
     const ownerUserId = await ensureSupabaseAuth();
     if (!ownerUserId) {
         return false;
     }
 
-    const eventRows = await supabaseSelectSharedEvents();
-    const remoteEvents = pickLatestRowsByKey(eventRows, 'id').map((row) => row.payload).filter(Boolean);
-    if (remoteEvents.length) {
-        writeStorage(TOKA_STORAGE_KEYS.events, mergeById(getSavedEvents(), remoteEvents));
+    const shouldForceFullRefresh = Boolean(options && options.fullRefresh);
+    const cursor = shouldForceFullRefresh ? '' : getEventsSyncCursor();
+    const eventRows = await supabaseSelectSharedEvents(cursor);
+
+    const hasChanges = mergeRemoteEventRowsIntoLocal(eventRows);
+    if (hasChanges) {
         notifyCloudEventsUpdated();
     }
     return true;
@@ -519,10 +643,46 @@ function stopSupabaseAutoSync() {
         clearInterval(TOKA_SUPABASE_SYNC_INTERVAL_ID);
         TOKA_SUPABASE_SYNC_INTERVAL_ID = null;
     }
+
+    if (TOKA_SUPABASE_EVENTS_CHANNEL && getSupabaseClient()) {
+        getSupabaseClient().removeChannel(TOKA_SUPABASE_EVENTS_CHANNEL);
+        TOKA_SUPABASE_EVENTS_CHANNEL = null;
+    }
+}
+
+function startSupabaseRealtimeEventsSync() {
+    const client = getSupabaseClient();
+    if (!client) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    if (TOKA_SUPABASE_EVENTS_CHANNEL) {
+        client.removeChannel(TOKA_SUPABASE_EVENTS_CHANNEL);
+        TOKA_SUPABASE_EVENTS_CHANNEL = null;
+    }
+
+    TOKA_SUPABASE_EVENTS_CHANNEL = client
+        .channel(`toka-shared-events-${ownerUserId}`)
+        .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: TOKA_SUPABASE_TABLES.events
+        }, () => {
+            syncSharedEventsFromCloud().catch((error) => {
+                reportSupabaseError('realtime.sharedEvents', error);
+            });
+        })
+        .subscribe();
 }
 
 function startSupabaseAutoSync() {
     stopSupabaseAutoSync();
+    startSupabaseRealtimeEventsSync();
     TOKA_SUPABASE_SYNC_INTERVAL_ID = setInterval(() => {
         syncSharedEventsFromCloud().catch((error) => {
             reportSupabaseError('autoSync.sharedEvents', error);
@@ -564,6 +724,8 @@ async function initializeSupabaseSync() {
     TOKA_SUPABASE_BOOTSTRAPPED = true;
 
     await pullSupabaseIntoLocalStorage();
+    await flushPendingEventSyncQueue();
+    await syncSharedEventsFromCloud({ fullRefresh: true });
     pushLocalSnapshotToSupabase();
     startSupabaseAutoSync();
     notifyCloudEventsUpdated();
