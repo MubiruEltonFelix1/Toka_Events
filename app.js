@@ -1164,9 +1164,11 @@ function renderProfile() {
     `).join('');
   }
   if (settings) {
+    const hasHostedEvents = getHostedEvents().length > 0;
     settings.innerHTML = `
       <button type="button" class="settings-item" onclick="editProfile()"><span>Edit Profile</span><span>›</span></button>
       <button type="button" class="settings-item" onclick="toggleNotifications()"><span>Notifications</span><span>${profile.notificationsEnabled === false ? 'Off' : 'On'}</span></button>
+      <button type="button" class="settings-item" onclick="${hasHostedEvents ? 'openHostDashboard()' : "showScreen('screen-host')"}"><span>${hasHostedEvents ? 'Host Dashboard' : 'Start Hosting'}</span><span>${hasHostedEvents ? '↗' : '›'}</span></button>
       <div class="settings-item static-item">
         <span>Language</span>
         <span>${escapeHtml(profile.language || 'English')}</span>
@@ -1652,6 +1654,24 @@ function getRevenueSeries(eventId, points = 7) {
   return dayBuckets;
 }
 
+function getEventStatusBadge(event) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eventDate = new Date(`${event.date}T12:00:00`);
+  const diffDays = Math.floor((eventDate - today) / 86400000);
+
+  if (diffDays < 0) {
+    return { label: 'Past', className: 'is-past' };
+  }
+  if (diffDays === 0) {
+    return { label: 'Today', className: 'is-today' };
+  }
+  if (diffDays <= 7) {
+    return { label: `${diffDays}d away`, className: 'is-soon' };
+  }
+  return { label: 'Upcoming', className: 'is-upcoming' };
+}
+
 function renderHostDashboard() {
   const guard = qs('#host-dashboard-guard');
   const content = qs('#host-dashboard-content');
@@ -1662,43 +1682,80 @@ function renderHostDashboard() {
   const hosted = getHostedEvents();
   if (!hosted.length) {
     guard.classList.remove('hidden');
+    guard.innerHTML = `
+      <h3>Host access only</h3>
+      <p class="text-muted">Publish at least one event from this profile to unlock dashboard analytics.</p>
+      <button type="button" class="button button-primary" onclick="showScreen('screen-host')">Create Event</button>
+    `;
     content.innerHTML = '';
     return;
   }
 
   guard.classList.add('hidden');
-  content.innerHTML = hosted.map((event) => {
+  const totalImpressions = hosted.reduce((sum, event) => sum + Number(getEventMetric(event.id).impressions || 0), 0);
+  const totalTicketSales = hosted.reduce((sum, event) => sum + Number(getEventMetric(event.id).ticketSalesCount || 0), 0);
+  const totalRevenue = hosted.reduce((sum, event) => sum + Number(getEventMetric(event.id).ticketRevenueTotal || 0), 0);
+  const totalRegistrations = hosted.reduce((sum, event) => sum + Number(event.registered || 0), 0);
+
+  const headerSummary = `
+    <section class="dashboard-summary-grid" aria-label="Host overview metrics">
+      <article class="stat-card"><strong>${hosted.length}</strong><span>Hosted Events</span></article>
+      <article class="stat-card"><strong>${totalRegistrations}</strong><span>Total Registered</span></article>
+      <article class="stat-card"><strong>${totalTicketSales}</strong><span>Total Tickets Sold</span></article>
+      <article class="stat-card"><strong>${formatPrice(totalRevenue, 'UGX')}</strong><span>Total Revenue</span></article>
+      <article class="stat-card"><strong>${totalImpressions}</strong><span>Total Impressions</span></article>
+    </section>
+  `;
+
+  const eventCards = hosted.map((event) => {
     const metric = getEventMetric(event.id);
     const impressions = Number(metric.impressions || 0);
     const sold = Number(metric.ticketSalesCount || 0);
+    const registered = Number(event.registered || 0);
+    const capacity = Number(event.capacity || 0);
+    const remaining = capacity > 0 ? Math.max(capacity - registered, 0) : 0;
+    const fillRate = capacity > 0 ? ((registered / capacity) * 100).toFixed(1) : '0.0';
     const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(1) : '0.0';
     const entries = getCalendarEntries().filter((entry) => entry.eventId === event.id);
     const withTicket = entries.filter((entry) => entry.withTicket).length;
     const withoutTicket = entries.filter((entry) => !entry.withTicket).length;
     const thumb = getEventThumbnail(event);
+    const status = getEventStatusBadge(event);
 
     return `
-      <article class="dashboard-card card">
+      <article class="dashboard-card card" aria-label="Dashboard card for ${escapeHtml(event.name)}">
         <div class="dashboard-top">
           ${thumb ? `<img class="dashboard-thumb" src="${escapeHtml(thumb)}" alt="${escapeHtml(event.name)} thumbnail" />` : `<div class="dashboard-thumb-fallback">${escapeHtml(event.emoji || '🎫')}</div>`}
           <div>
-            <h3>${escapeHtml(event.name)}</h3>
+            <div class="dashboard-title-row">
+              <h3>${escapeHtml(event.name)}</h3>
+              <span class="dashboard-pill ${status.className}">${escapeHtml(status.label)}</span>
+            </div>
             <p class="text-muted">${escapeHtml(event.city)} · ${escapeHtml(formatDate(event.date))}</p>
+            <p class="dashboard-event-meta">Capacity ${capacity || 0} · Remaining ${remaining} · Fill ${fillRate}%</p>
           </div>
         </div>
         <div class="dashboard-metrics">
           <div class="stat-card"><strong>${formatPrice(metric.ticketRevenueTotal || 0, event.currency || 'UGX')}</strong><span>Total Revenue</span></div>
-          <div class="stat-card"><strong>${sold}</strong><span>Tickets Sold (General)</span></div>
+          <div class="stat-card"><strong>${registered}</strong><span>Registered People</span></div>
+          <div class="stat-card"><strong>${sold}</strong><span>Tickets Sold</span></div>
+          <div class="stat-card"><strong>${remaining}</strong><span>Remaining Slots</span></div>
           <div class="stat-card"><strong>${withTicket} / ${withoutTicket}</strong><span>Calendar Adds (With/Without Ticket)</span></div>
           <div class="stat-card"><strong>${impressions}</strong><span>Impressions</span></div>
           <div class="stat-card"><strong>${conversion}%</strong><span>Conversion Rate</span></div>
         </div>
+        <div class="dashboard-actions">
+          <button type="button" class="button button-secondary button-small" onclick="openEventDetail('${event.id}')">View Event</button>
+          <button type="button" class="button button-ghost button-small" onclick="copyToClipboard('toka.app/e/${event.id}')">Copy Event Link</button>
+        </div>
         <div class="dashboard-chart-wrap">
-          <canvas id="host-chart-${escapeHtml(event.id)}" height="120"></canvas>
+          <canvas id="host-chart-${escapeHtml(event.id)}" height="120" role="img" aria-label="Revenue chart for ${escapeHtml(event.name)}"></canvas>
         </div>
       </article>
     `;
   }).join('');
+
+  content.innerHTML = `${headerSummary}${eventCards}`;
 
   Object.values(TOKA_APP_STATE.hostChartInstances).forEach((chart) => {
     if (chart && typeof chart.destroy === 'function') {
