@@ -592,26 +592,67 @@ function setHomeCategory(category) {
     showScreen('screen-discover');
 }
 
+  function getAvailableCategories() {
+    const events = getEvents();
+    const seen = new Set();
+    const categories = [];
+
+    TOKA_CATEGORY_OPTIONS.forEach((category) => {
+      seen.add(String(category).toLowerCase());
+      categories.push(category);
+    });
+
+    events.forEach((event) => {
+      const category = String(event && event.category ? event.category : '').trim();
+      if (!category) {
+        return;
+      }
+      const key = category.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      categories.push(category);
+    });
+
+    return categories;
+  }
+
 function getFilteredEvents() {
     const events = getEvents();
     const query = TOKA_APP_STATE.discoverQuery.trim().toLowerCase();
+    const normalizedActiveCategory = String(TOKA_APP_STATE.discoverCategory || 'All').trim().toLowerCase();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     return events.filter((event) => {
-        const matchesQuery = !query || [event.name, event.venue, event.city, event.organiser, ...(event.tags || [])].join(' ').toLowerCase().includes(query);
-        const matchesCategory = TOKA_APP_STATE.discoverCategory === 'All' || event.category === TOKA_APP_STATE.discoverCategory;
+      const searchableText = [
+        event.name,
+        event.venue,
+        event.city,
+        event.organiser,
+        event.description,
+        event.eventType,
+        event.deliveryMode,
+        ...(event.tags || [])
+      ].join(' ').toLowerCase();
+      const matchesQuery = !query || searchableText.includes(query);
+
+      const eventCategory = String(event.category || '').trim().toLowerCase();
+      const matchesCategory = normalizedActiveCategory === 'all' || eventCategory === normalizedActiveCategory;
+
         const eventDate = new Date(`${event.date}T12:00:00`);
+      const isValidEventDate = !Number.isNaN(eventDate.getTime());
         const diffDays = Math.floor((eventDate - today) / 86400000);
 
         let matchesTime = true;
         if (TOKA_APP_STATE.discoverTimeFilter === 'Today') {
-            matchesTime = diffDays === 0;
+        matchesTime = isValidEventDate && diffDays === 0;
         } else if (TOKA_APP_STATE.discoverTimeFilter === 'This Week') {
-            matchesTime = diffDays >= 0 && diffDays <= 6;
+        matchesTime = isValidEventDate && diffDays >= 0 && diffDays <= 6;
         } else if (TOKA_APP_STATE.discoverTimeFilter === 'This Weekend') {
             const dayOfWeek = eventDate.getDay();
-            matchesTime = diffDays >= 0 && (dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0);
+        matchesTime = isValidEventDate && diffDays >= 0 && (dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0);
         } else if (TOKA_APP_STATE.discoverTimeFilter === 'Free') {
             matchesTime = Number(event.price) === 0;
         } else if (TOKA_APP_STATE.discoverTimeFilter === 'Paid') {
@@ -627,7 +668,7 @@ function renderCategoryChips(container, activeCategory, onClickHandler) {
         return;
     }
 
-    const chips = ['All', ...TOKA_CATEGORY_OPTIONS];
+  const chips = ['All', ...getAvailableCategories()];
     container.innerHTML = chips.map((category) => `
     <button type="button" class="chip ${category === activeCategory ? 'active' : ''}" onclick="${onClickHandler}('${category.replace(/'/g, "\\'")}')">${escapeHtml(category)}</button>
   `).join('');
@@ -1946,6 +1987,12 @@ function publishEvent() {
     TOKA_APP_STATE.lastPublishedFingerprint = fingerprint;
     TOKA_APP_STATE.lastPublishedAt = now;
     setHostPublishButtonState({ disabled: true, label: 'Published ✓' });
+
+    TOKA_APP_STATE.homeCategory = 'All';
+    TOKA_APP_STATE.discoverCategory = 'All';
+    TOKA_APP_STATE.discoverTimeFilter = 'All';
+    TOKA_APP_STATE.discoverQuery = '';
+
     renderHome();
     renderDiscover();
     renderCalendarScreen();
