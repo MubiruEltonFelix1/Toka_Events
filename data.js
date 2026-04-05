@@ -150,8 +150,7 @@ async function supabaseSelect(table) {
     const { data, error } = await client
         .from(table)
         .select('*')
-        .eq('owner_user_id', ownerUserId)
-        .eq('device_id', getDeviceId());
+        .eq('owner_user_id', ownerUserId);
 
     if (error || !Array.isArray(data)) {
         if (error) {
@@ -161,6 +160,41 @@ async function supabaseSelect(table) {
     }
 
     return data;
+}
+
+function getRowUpdatedAt(row) {
+    if (!row || !row.updated_at) {
+        return 0;
+    }
+    const timestamp = Date.parse(row.updated_at);
+    return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function pickLatestRow(rows) {
+    let latest = null;
+    let latestTs = -1;
+    (rows || []).forEach((row) => {
+        const ts = getRowUpdatedAt(row);
+        if (!latest || ts >= latestTs) {
+            latest = row;
+            latestTs = ts;
+        }
+    });
+    return latest;
+}
+
+function pickLatestRowsByKey(rows, keyField) {
+    const latestByKey = new Map();
+    (rows || []).forEach((row) => {
+        if (!row || !row[keyField]) {
+            return;
+        }
+        const current = latestByKey.get(row[keyField]);
+        if (!current || getRowUpdatedAt(row) >= getRowUpdatedAt(current)) {
+            latestByKey.set(row[keyField], row);
+        }
+    });
+    return Array.from(latestByKey.values());
 }
 
 function upsertProfileCloud() {
@@ -350,7 +384,7 @@ async function pullSupabaseIntoLocalStorage() {
         supabaseSelect(TOKA_SUPABASE_TABLES.eventMetrics)
     ]);
 
-    const remoteProfile = profileRows[0] || null;
+    const remoteProfile = pickLatestRow(profileRows);
     if (remoteProfile && remoteProfile.payload) {
         const localProfile = getUserProfile();
         writeStorage(TOKA_STORAGE_KEYS.userProfile, {...localProfile, ...remoteProfile.payload });
@@ -360,17 +394,17 @@ async function pullSupabaseIntoLocalStorage() {
         }
     }
 
-    const remoteEvents = eventRows.map((row) => row.payload).filter(Boolean);
+    const remoteEvents = pickLatestRowsByKey(eventRows, 'id').map((row) => row.payload).filter(Boolean);
     if (remoteEvents.length) {
         writeStorage(TOKA_STORAGE_KEYS.events, mergeById(getSavedEvents(), remoteEvents));
     }
 
-    const remoteTickets = ticketRows.map((row) => row.payload).filter(Boolean);
+    const remoteTickets = pickLatestRowsByKey(ticketRows, 'id').map((row) => row.payload).filter(Boolean);
     if (remoteTickets.length) {
         writeStorage(TOKA_STORAGE_KEYS.tickets, mergeById(getTickets(), remoteTickets));
     }
 
-    const remoteCalendarEntries = calendarRows.map((row) => row.payload).filter(Boolean);
+    const remoteCalendarEntries = pickLatestRowsByKey(calendarRows, 'event_id').map((row) => row.payload).filter(Boolean);
     if (remoteCalendarEntries.length) {
         const localMap = new Map(getCalendarEntries().map((entry) => [entry.eventId, entry]));
         remoteCalendarEntries.forEach((entry) => {
@@ -381,7 +415,7 @@ async function pullSupabaseIntoLocalStorage() {
         writeStorage(TOKA_STORAGE_KEYS.calendarEntries, Array.from(localMap.values()));
     }
 
-    const remoteMetrics = metricRows.reduce((accumulator, row) => {
+    const remoteMetrics = pickLatestRowsByKey(metricRows, 'event_id').reduce((accumulator, row) => {
         if (row && row.event_id && row.payload) {
             accumulator[row.event_id] = row.payload;
         }
@@ -395,7 +429,7 @@ async function pullSupabaseIntoLocalStorage() {
     }
 
     const remoteCommentsByEvent = {};
-    commentRows.forEach((row) => {
+    pickLatestRowsByKey(commentRows, 'id').forEach((row) => {
         if (!row || !row.event_id || !row.payload) {
             return;
         }
@@ -410,7 +444,7 @@ async function pullSupabaseIntoLocalStorage() {
     });
 
     const remoteUpdatesByEvent = {};
-    updateRows.forEach((row) => {
+    pickLatestRowsByKey(updateRows, 'id').forEach((row) => {
         if (!row || !row.event_id || !row.payload) {
             return;
         }
