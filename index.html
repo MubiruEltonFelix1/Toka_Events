@@ -4,16 +4,29 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0D0D0D" />
+    <meta name="theme-color" content="#FF6B00" />
     <title>Toka - Events & Ticketing</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
     <div class="app-shell">
+        <header class="app-header">
+            <button type="button" class="brand-lockup" onclick="showScreen('screen-home')" aria-label="Go to home">
+                <span class="avatar brand-mark">T</span>
+                <span class="brand-copy">
+                    <span class="eyebrow">Tuko</span>
+                    <span class="brand-title">Events</span>
+                </span>
+            </button>
+            <div class="auth-header-actions" id="auth-header-actions"></div>
+        </header>
         <div id="app-toast" class="toast" aria-live="polite"></div>
 
         <div class="screen onboarding-screen" id="screen-onboarding">
@@ -31,17 +44,6 @@
 
         <div class="screen active" id="screen-home">
             <div class="container">
-                <div class="topbar">
-                    <div class="topbar-left">
-                        <div class="avatar" id="home-logo" style="background:#F4500A">T</div>
-                        <div>
-                            <p class="eyebrow">Toka</p>
-                            <h2 class="brand-title">Events & ticketing</h2>
-                        </div>
-                    </div>
-                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-profile')">Profile</button>
-                </div>
-
                 <div class="hero-card">
                     <div class="hero-copy">
                         <p class="eyebrow">Community-first experiences</p>
@@ -314,10 +316,10 @@
                         </div>
                     </div>
 
-                    <label class="inline-row card" for="register-terms">
-            <input id="register-terms" type="checkbox" />
-            <span>I agree to the event terms</span>
-          </label>
+                                        <label class="checkbox-row single-line card" for="register-terms">
+                                                <input id="register-terms" type="checkbox" />
+                                                <span>I agree to the event terms</span>
+                                        </label>
 
                     <button type="submit" class="button button-primary button-block">Confirm & Get Ticket</button>
                 </form>
@@ -467,10 +469,10 @@
                             </div>
                         </div>
                         <div class="form-stack">
-                            <label class="inline-row card" for="host-free">
-                <input id="host-free" type="checkbox" />
-                <span>Is this event free?</span>
-              </label>
+                                                        <label class="checkbox-row single-line card" for="host-free">
+                                                                <input id="host-free" type="checkbox" />
+                                                                <span>Is this event free?</span>
+                                                        </label>
                             <div class="field-group">
                                 <label for="host-price">Ticket Price (UGX)</label>
                                 <input id="host-price" type="number" min="0" step="1000" placeholder="25000" />
@@ -604,6 +606,32 @@
             <div class="calendar-modal-card card">
                 <button type="button" class="button button-ghost button-small calendar-close" onclick="closeCalendarEventModal()">Close ✕</button>
                 <div id="calendar-modal-content"></div>
+            </div>
+        </div>
+
+        <div id="auth-modal" class="auth-modal hidden" aria-hidden="true">
+            <div class="auth-modal-backdrop" onclick="closeAuthModal()"></div>
+            <div class="auth-modal-card card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+                <button type="button" class="button button-ghost button-small auth-close" id="auth-close" aria-label="Close sign in dialog">Close ✕</button>
+                <p class="eyebrow" id="auth-mode-label">Sign In</p>
+                <h2 id="auth-title">Welcome back to Toka</h2>
+                <p class="text-muted" id="auth-description">Sign in to access your tickets, profile, and hosting tools.</p>
+                <form id="auth-form" class="form-stack" novalidate>
+                    <div class="field-group">
+                        <label for="auth-email">Email</label>
+                        <input id="auth-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required />
+                    </div>
+                    <div class="field-group">
+                        <label for="auth-password">Password</label>
+                        <input id="auth-password" type="password" autocomplete="current-password" placeholder="Your password" required />
+                    </div>
+                    <div id="auth-feedback" class="auth-feedback" aria-live="polite"></div>
+                    <button type="submit" class="button button-primary button-block" id="auth-submit">Sign In</button>
+                </form>
+                <div class="auth-actions">
+                    <button type="button" class="button button-ghost button-small" id="auth-toggle-mode">Need an account? Sign Up</button>
+                    <button type="button" class="button button-ghost button-small" id="auth-forgot-password">Forgot Password?</button>
+                </div>
             </div>
         </div>
     </div>

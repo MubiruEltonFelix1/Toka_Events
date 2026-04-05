@@ -75,7 +75,11 @@ function getSupabaseClient() {
 }
 
 function getSupabaseOwnerUserId() {
-    return TOKA_SUPABASE_USER_ID || '';
+    return TOKA_SUPABASE_USER_ID || (window.TOKA_AUTH_STATE && window.TOKA_AUTH_STATE.user ? window.TOKA_AUTH_STATE.user.id : '') || '';
+}
+
+function setSupabaseOwnerUserId(userId) {
+    TOKA_SUPABASE_USER_ID = String(userId || '');
 }
 
 async function ensureSupabaseAuth() {
@@ -84,25 +88,16 @@ async function ensureSupabaseAuth() {
         return '';
     }
 
-    if (TOKA_SUPABASE_USER_ID) {
-        return TOKA_SUPABASE_USER_ID;
-    }
-
+    const authStateUser = window.TOKA_AUTH_STATE && window.TOKA_AUTH_STATE.user ? window.TOKA_AUTH_STATE.user : null;
     const { data: sessionData } = await client.auth.getSession();
-    const activeUser = sessionData && sessionData.session && sessionData.session.user;
+    const activeUser = authStateUser || (sessionData && sessionData.session && sessionData.session.user);
     if (activeUser && activeUser.id) {
-        TOKA_SUPABASE_USER_ID = activeUser.id;
+        setSupabaseOwnerUserId(activeUser.id);
         return TOKA_SUPABASE_USER_ID;
     }
 
-    const { data: signInData, error } = await client.auth.signInAnonymously();
-    if (error) {
-        reportSupabaseError('auth.signInAnonymously', error);
-        return '';
-    }
-
-    TOKA_SUPABASE_USER_ID = signInData && signInData.user && signInData.user.id ? signInData.user.id : '';
-    return TOKA_SUPABASE_USER_ID;
+    setSupabaseOwnerUserId('');
+    return '';
 }
 
 function queueSupabaseWrite(operation) {
@@ -458,19 +453,16 @@ function pushLocalSnapshotToSupabase() {
 }
 
 async function initializeSupabaseSync() {
-    if (TOKA_SUPABASE_BOOTSTRAPPED) {
-        return Boolean(getSupabaseClient());
-    }
-    TOKA_SUPABASE_BOOTSTRAPPED = true;
-
     if (!getSupabaseClient()) {
         return false;
     }
 
-    await ensureSupabaseAuth();
-    if (!getSupabaseOwnerUserId()) {
+    const ownerUserId = await ensureSupabaseAuth();
+    if (!ownerUserId) {
         return false;
     }
+
+    TOKA_SUPABASE_BOOTSTRAPPED = true;
 
     await pullSupabaseIntoLocalStorage();
     pushLocalSnapshotToSupabase();
@@ -520,6 +512,7 @@ async function debugSupabaseConnection() {
 window.initializeSupabaseSync = initializeSupabaseSync;
 window.runFullSupabaseSync = pushLocalSnapshotToSupabase;
 window.debugSupabaseConnection = debugSupabaseConnection;
+window.setSupabaseOwnerUserId = setSupabaseOwnerUserId;
 
 const TOKA_PUBLIC_HOLIDAYS = [
     { id: 'hol-2026-01-01', date: '2026-01-01', name: "New Year's Day", scope: 'National' },

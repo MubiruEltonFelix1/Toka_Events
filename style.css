@@ -12,6 +12,7 @@
     --radius-lg: 20px;
     --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
     --nav-height: 78px;
+    --checkbox-accent: #FF6B00;
 }
 
 * {
@@ -29,6 +30,7 @@ body {
     color: var(--text-primary);
     font-family: 'DM Sans', sans-serif;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 body,
@@ -122,7 +124,7 @@ button {
 
 .trending-thumb-wrap {
     position: relative;
-    height: 150px;
+    aspect-ratio: 16 / 9;
     background: var(--card-gradient, linear-gradient(135deg, #2E2E2E, #F4500A));
 }
 
@@ -148,7 +150,7 @@ button {
 }
 
 .trending-body {
-    padding: 14px;
+    padding: 1.5rem;
 }
 
 .trending-body h4 {
@@ -330,8 +332,64 @@ button {
 .calendar-modal-card {
     position: relative;
     z-index: 1;
-    width: min(94vw, 560px);
-    margin: 8vh auto 0;
+    width: min(100vw - 2rem, 560px);
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    margin: 1rem auto 0;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    flex-shrink: 0;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--checkbox-accent);
+    vertical-align: middle;
+}
+
+.checkbox-row,
+.radio-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    cursor: pointer;
+}
+
+.checkbox-row.single-line,
+.radio-row.single-line {
+    align-items: center;
+}
+
+.checkbox-row label,
+.radio-row label,
+.checkbox-row span,
+.radio-row span {
+    flex: 1;
+    line-height: 1.4;
+    cursor: pointer;
+    user-select: none;
+}
+
+.radio-card span {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.radio-card strong {
+    display: block;
+}
+
+.radio-card small {
+    color: var(--text-muted);
+    display: block;
+    margin-top: 2px;
+}
+
+.radio-card input {
+    width: 1.125rem;
+    margin-top: 0.15rem;
 }
 
 .calendar-close {
@@ -475,6 +533,146 @@ button:active,
     width: 100%;
     min-height: 100vh;
     padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+}
+
+.app-header {
+    position: sticky;
+    top: 8px;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    margin: 0 12px 10px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(244, 80, 10, 0.14), rgba(26, 26, 26, 0.8));
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(244, 80, 10, 0.18);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.app-header .eyebrow {
+    margin-bottom: 0;
+}
+
+.brand-lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 44px;
+    padding: 0;
+    text-align: left;
+}
+
+.brand-lockup .brand-copy {
+    display: grid;
+    gap: 2px;
+}
+
+.brand-lockup .brand-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1rem;
+    line-height: 1.1;
+}
+
+.brand-mark {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+}
+
+.auth-header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.auth-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.auth-email {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    max-width: 46vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.auth-sign-in,
+.auth-sign-out {
+    white-space: nowrap;
+}
+
+.auth-sign-in {
+    background: #FF6B00;
+    border-color: transparent;
+}
+
+.auth-modal,
+.calendar-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+}
+
+.auth-modal-backdrop,
+.calendar-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.58);
+}
+
+.auth-modal-card {
+    position: relative;
+    z-index: 1;
+    width: min(100vw - 2rem, 480px);
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    margin: 1rem auto;
+    padding: 1.5rem;
+}
+
+.auth-modal-card h2 {
+    margin-bottom: 8px;
+    font-size: clamp(1.5rem, 5vw, 2rem);
+}
+
+.auth-close {
+    margin-left: auto;
+}
+
+.auth-actions {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.auth-feedback {
+    min-height: 1.25rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.auth-feedback.success {
+    color: var(--toka-lime);
+}
+
+.auth-feedback.error {
+    color: #ff8d68;
+}
+
+.auth-feedback.info {
+    color: var(--text-muted);
 }
 
 .screen {
@@ -602,7 +800,7 @@ p {
     background: var(--surface);
     border: 1px solid rgba(244, 80, 10, 0.15);
     border-radius: var(--radius-lg);
-    padding: 24px;
+    padding: 1.5rem;
     box-shadow: var(--shadow);
 }
 
@@ -628,7 +826,7 @@ p {
 }
 
 .button-small {
-    min-height: 40px;
+    min-height: 44px;
     padding: 10px 16px;
     font-size: 0.95rem;
 }
@@ -671,6 +869,7 @@ p {
     color: var(--toka-orange);
     border: 1px solid transparent;
     white-space: nowrap;
+    min-height: 44px;
 }
 
 .chip.active {
@@ -781,7 +980,8 @@ p {
 
 .event-cover {
     position: relative;
-    height: 180px;
+    aspect-ratio: 16 / 9;
+    height: auto;
     background: var(--card-gradient, linear-gradient(135deg, #2E2E2E, #F4500A));
     display: grid;
     place-items: center;
@@ -802,7 +1002,7 @@ p {
 }
 
 .event-card-body {
-    padding: 20px;
+    padding: 1.5rem;
 }
 
 .event-card-topline {
@@ -1000,6 +1200,7 @@ textarea {
     padding: 14px 16px;
     outline: none;
     width: 100%;
+    font-size: 16px;
 }
 
 input:focus,
@@ -1041,6 +1242,7 @@ textarea {
 }
 
 .radio-card {
+    display: flex;
     align-items: flex-start;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
@@ -1054,8 +1256,15 @@ textarea {
 }
 
 .radio-card input {
-    width: auto;
-    margin-top: 4px;
+    width: 1.125rem;
+    margin-top: 0.15rem;
+    flex-shrink: 0;
+}
+
+.payment-option span {
+    display: grid;
+    align-items: start;
+    gap: 2px;
 }
 
 .radio-card small {
@@ -1086,7 +1295,7 @@ textarea {
 .settings-card,
 .ticket-card,
 .onboarding-slide {
-    padding: 24px;
+    padding: 1.5rem;
 }
 
 .ticket-card {
@@ -1527,9 +1736,9 @@ textarea {
     .screen {
         padding-left: 32px;
         padding-right: 32px;
-        .dashboard-summary-grid {
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-        }
+    }
+    .dashboard-summary-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
     }
     .hero-card {
         min-height: 78vh;
@@ -1551,16 +1760,107 @@ textarea {
 }
 
 @media (max-width: 719px) {
+    .screen {
+        padding: 1rem 1rem 5rem;
+    }
+    .app-header {
+        top: 6px;
+        padding: 10px 12px;
+        gap: 8px;
+        margin: 0 8px 8px;
+        border-radius: 14px;
+    }
+    .brand-lockup {
+        gap: 10px;
+    }
+    .brand-lockup .brand-copy,
+    .brand-lockup .eyebrow,
+    .brand-lockup .brand-title {
+        display: none;
+    }
+    .auth-header-actions {
+        gap: 8px;
+    }
+    .auth-email {
+        max-width: 34vw;
+    }
+    .card,
+    .summary-card,
+    .preview-panel,
+    .success-panel,
+    .profile-card,
+    .settings-card,
+    .ticket-card,
+    .onboarding-slide,
+    .auth-modal-card,
+    .calendar-modal-card {
+        padding: 1rem;
+    }
+    .event-card-body,
+    .trending-body {
+        padding: 1rem;
+    }
+    .detail-footer {
+        padding: 1rem;
+    }
     h1 {
-        font-size: clamp(2.8rem, 18vw, 4rem);
+        font-size: clamp(1.75rem, 8vw, 2rem);
+    }
+    h2 {
+        font-size: clamp(1.5rem, 6vw, 1.75rem);
+    }
+    h3 {
+        font-size: 1.25rem;
     }
     .hero-actions,
     .step-actions,
-    .onboarding-actions {
+    .onboarding-actions,
+    .detail-footer-actions,
+    .calendar-modal-actions,
+    .auth-actions {
         flex-direction: column;
     }
-    .button {
+    .hero-actions .button,
+    .step-actions .button,
+    .onboarding-actions .button,
+    .detail-footer-actions .button,
+    .calendar-modal-actions .button,
+    .auth-actions .button,
+    .button-block {
         width: 100%;
+    }
+    .button {
+        padding: 12px 16px;
+    }
+    .button-small {
+        padding: 10px 12px;
+    }
+    .topbar .button,
+    .app-header .button,
+    .chip {
+        width: auto;
+    }
+    .hero-card {
+        min-height: auto;
+        padding: 1rem;
+        gap: 12px;
+    }
+    .hero-card > .card:last-child {
+        display: none;
+    }
+    .detail-footer-inner {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .detail-footer-actions {
+        width: 100%;
+    }
+    .detail-footer-actions .button {
+        width: 100%;
+    }
+    .hero-actions .button {
+        flex: 0 0 auto;
+        min-height: 44px;
     }
     .detail-footer {
         position: fixed;

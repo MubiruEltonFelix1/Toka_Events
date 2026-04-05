@@ -25,6 +25,27 @@ const TOKA_APP_STATE = {
 
 const TOKA_HOST_PUBLISH_DUPLICATE_WINDOW_MS = 12000;
 
+const TOKA_AUTH_STATE = {
+  session: null,
+  user: null,
+  isAuthenticated: false,
+  isLoading: true,
+  authMode: 'signin',
+  pendingScreenId: '',
+  feedbackMessage: '',
+  feedbackType: ''
+};
+
+const TOKA_PROTECTED_SCREENS = new Set([
+  'screen-calendar',
+  'screen-my-tickets',
+  'screen-profile',
+  'screen-host',
+  'screen-host-dashboard'
+]);
+
+window.TOKA_AUTH_STATE = TOKA_AUTH_STATE;
+
 const TOKA_AVATAR_COLORS = ['#F4500A', '#F7B731', '#C6F135', '#2E2E2E', '#7B3F00', '#D16B34', '#AA4C1D', '#5C3B1E'];
 
 function qs(selector, root = document) {
@@ -64,6 +85,252 @@ function hashString(value) {
 
 function getAvatarColor(name) {
     return TOKA_AVATAR_COLORS[hashString(String(name || 'Toka')) % TOKA_AVATAR_COLORS.length];
+}
+
+function isAuthenticatedUser() {
+  return Boolean(TOKA_AUTH_STATE.isAuthenticated && TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id);
+}
+
+function getAuthEmailLabel() {
+  const email = String(TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.email ? TOKA_AUTH_STATE.user.email : '').trim();
+  if (!email) {
+    return 'Account';
+  }
+  const [localPart, domainPart] = email.split('@');
+  if (!domainPart) {
+    return email;
+  }
+  const trimmedLocal = localPart.length > 5 ? `${localPart.slice(0, 5)}…` : localPart;
+  return `${trimmedLocal}@${domainPart}`;
+}
+
+function setAuthFeedback(message, type = 'error') {
+  TOKA_AUTH_STATE.feedbackMessage = String(message || '');
+  TOKA_AUTH_STATE.feedbackType = type;
+  const feedback = qs('#auth-feedback');
+  if (!feedback) {
+    return;
+  }
+  if (!TOKA_AUTH_STATE.feedbackMessage) {
+    feedback.textContent = '';
+    feedback.className = 'auth-feedback';
+    return;
+  }
+  feedback.textContent = TOKA_AUTH_STATE.feedbackMessage;
+  feedback.className = `auth-feedback ${type === 'success' ? 'success' : type === 'error' ? 'error' : 'info'}`;
+}
+
+function renderAuthHeader() {
+  const container = qs('#auth-header-actions');
+  if (!container) {
+    return;
+  }
+
+  if (isAuthenticatedUser()) {
+    container.innerHTML = `
+    <div class="auth-status">
+    <span class="auth-email" title="${escapeHtml(TOKA_AUTH_STATE.user.email || '')}">${escapeHtml(getAuthEmailLabel())}</span>
+    <button type="button" class="button button-secondary button-small auth-sign-out" onclick="logoutUser()">Sign Out</button>
+    </div>
+  `;
+    return;
+  }
+
+  container.innerHTML = `
+    <button type="button" class="button button-primary button-small auth-sign-in" onclick="openAuthModal('signin')">Sign In</button>
+  `;
+}
+
+function openAuthModal(mode = 'signin', message = '') {
+  const modal = qs('#auth-modal');
+  const emailInput = qs('#auth-email');
+  const passwordInput = qs('#auth-password');
+  const modeLabel = qs('#auth-mode-label');
+  const title = qs('#auth-title');
+  const description = qs('#auth-description');
+  const submitButton = qs('#auth-submit');
+  const toggleButton = qs('#auth-toggle-mode');
+  const forgotButton = qs('#auth-forgot-password');
+
+  TOKA_AUTH_STATE.authMode = mode === 'signup' ? 'signup' : 'signin';
+
+  if (modeLabel) {
+    modeLabel.textContent = TOKA_AUTH_STATE.authMode === 'signup' ? 'Sign Up' : 'Sign In';
+  }
+  if (title) {
+    title.textContent = TOKA_AUTH_STATE.authMode === 'signup' ? 'Create your Toka account' : 'Welcome back to Toka';
+  }
+  if (description) {
+    description.textContent = TOKA_AUTH_STATE.authMode === 'signup'
+      ? 'Create an account to host events, save tickets, and keep your session synced.'
+      : 'Sign in to access your tickets, profile, and hosting tools.';
+  }
+  if (submitButton) {
+    submitButton.textContent = TOKA_AUTH_STATE.authMode === 'signup' ? 'Sign Up' : 'Sign In';
+  }
+  if (toggleButton) {
+    toggleButton.textContent = TOKA_AUTH_STATE.authMode === 'signup' ? 'Already have an account? Sign In' : 'Need an account? Sign Up';
+  }
+  if (forgotButton) {
+    forgotButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode === 'signup');
+  }
+
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  if (emailInput && !emailInput.value) {
+    emailInput.focus();
+  } else if (passwordInput) {
+    passwordInput.focus();
+  }
+
+  setAuthFeedback(message, message ? 'info' : '');
+}
+
+function closeAuthModal() {
+  const modal = qs('#auth-modal');
+  if (!modal) {
+    return;
+  }
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+function toggleAuthMode() {
+  openAuthModal(TOKA_AUTH_STATE.authMode === 'signup' ? 'signin' : 'signup');
+}
+
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+  const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  const emailInput = qs('#auth-email');
+  const passwordInput = qs('#auth-password');
+  const email = emailInput ? emailInput.value.trim() : '';
+  const password = passwordInput ? passwordInput.value : '';
+
+  if (!client || !client.auth) {
+    setAuthFeedback('Supabase auth is not configured in this browser session.');
+    return;
+  }
+
+  if (!email || !password) {
+    setAuthFeedback('Email and password are required.');
+    return;
+  }
+
+  setAuthFeedback('');
+  const submitButton = qs('#auth-submit');
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+
+  try {
+    if (TOKA_AUTH_STATE.authMode === 'signup') {
+      const { error } = await client.auth.signUp({ email, password });
+      if (error) {
+        throw error;
+      }
+      setAuthFeedback('Check your email to confirm your account.', 'success');
+      if (passwordInput) {
+        passwordInput.value = '';
+      }
+      return;
+    }
+
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if (error) {
+      throw error;
+    }
+
+    const session = data && data.session ? data.session : null;
+    applyAuthSession(session);
+    setAuthFeedback('Signed in successfully.', 'success');
+    closeAuthModal();
+    if (TOKA_AUTH_STATE.pendingScreenId) {
+      const nextScreen = TOKA_AUTH_STATE.pendingScreenId;
+      TOKA_AUTH_STATE.pendingScreenId = '';
+      showScreen(nextScreen);
+    } else {
+      renderHome();
+      renderDiscover();
+      renderTickets();
+      renderProfile();
+      renderCalendarScreen();
+    }
+  } catch (error) {
+    const message = error && error.message ? error.message : 'Could not sign in. Please try again.';
+    setAuthFeedback(message);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
+}
+
+async function handleForgotPassword() {
+  const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  const emailInput = qs('#auth-email');
+  const email = emailInput ? emailInput.value.trim() : '';
+
+  if (!client || !client.auth) {
+    setAuthFeedback('Supabase auth is not configured in this browser session.');
+    return;
+  }
+  if (!email) {
+    setAuthFeedback('Enter your email first.');
+    return;
+  }
+
+  try {
+    const { error } = await client.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`
+    });
+    if (error) {
+      throw error;
+    }
+    setAuthFeedback('Password reset email sent. Check your inbox.', 'success');
+  } catch (error) {
+    const message = error && error.message ? error.message : 'Could not send password reset email.';
+    setAuthFeedback(message);
+  }
+}
+
+async function applyAuthSession(session) {
+  TOKA_AUTH_STATE.session = session || null;
+  TOKA_AUTH_STATE.user = session && session.user ? session.user : null;
+  TOKA_AUTH_STATE.isAuthenticated = Boolean(TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id);
+  TOKA_AUTH_STATE.isLoading = false;
+
+  if (typeof window.setSupabaseOwnerUserId === 'function') {
+    window.setSupabaseOwnerUserId(TOKA_AUTH_STATE.isAuthenticated ? TOKA_AUTH_STATE.user.id : '');
+  }
+
+  renderAuthHeader();
+  renderProfile();
+
+  if (TOKA_AUTH_STATE.isAuthenticated && typeof window.initializeSupabaseSync === 'function') {
+    await window.initializeSupabaseSync();
+    if (typeof window.runFullSupabaseSync === 'function') {
+      window.runFullSupabaseSync();
+    }
+  }
+
+  if (!TOKA_AUTH_STATE.isAuthenticated && TOKA_PROTECTED_SCREENS.has(TOKA_APP_STATE.currentScreen)) {
+    TOKA_APP_STATE.currentScreen = 'screen-home';
+    showScreen('screen-home');
+  }
+
+  renderHome();
+  renderDiscover();
+  renderTickets();
+  if (TOKA_APP_STATE.currentScreen === 'screen-calendar') {
+    renderCalendarScreen();
+  }
+  if (TOKA_APP_STATE.currentScreen === 'screen-host-dashboard') {
+    renderHostDashboard();
+  }
 }
 
 const TOKA_EVENT_THUMBNAILS = {
@@ -108,8 +375,7 @@ function getEventById(eventId) {
 }
 
 function isLoggedInUser() {
-    const profile = getUserProfile();
-    return Boolean(getOnboardingComplete() && profile && profile.name && profile.phone);
+  return isAuthenticatedUser();
 }
 
 function getCalendarSavedEntry(eventId) {
@@ -163,6 +429,12 @@ function updateBottomNavActive(screenId) {
 }
 
 function showScreen(screenId) {
+  if (TOKA_PROTECTED_SCREENS.has(screenId) && !isAuthenticatedUser()) {
+    TOKA_AUTH_STATE.pendingScreenId = screenId;
+    openAuthModal('signin', 'Sign in to continue.');
+    return;
+  }
+
     TOKA_APP_STATE.currentScreen = screenId;
     qsa('.screen').forEach((screen) => {
         screen.classList.toggle('active', screen.id === screenId);
@@ -949,7 +1221,7 @@ function renderRegistrationScreen(event) {
   if (methodContainer) {
     const isFreeEvent = event.price === 0;
     const freeOption = event.price === 0 ? `
-      <label class="payment-option radio-card ${isFreeEvent ? 'active' : ''}">
+      <label class="payment-option radio-card radio-row ${isFreeEvent ? 'active' : ''}">
         <input type="radio" name="paymentMethod" value="Free" ${isFreeEvent ? 'checked' : ''} />
         <span>
           <strong>Free</strong>
@@ -959,14 +1231,14 @@ function renderRegistrationScreen(event) {
     ` : '';
 
     methodContainer.innerHTML = `
-      <label class="payment-option radio-card ${isFreeEvent ? '' : 'active'}">
+      <label class="payment-option radio-card radio-row ${isFreeEvent ? '' : 'active'}">
         <input type="radio" name="paymentMethod" value="MTN Mobile Money" ${isFreeEvent ? '' : 'checked'} />
         <span>
           <strong>MTN Mobile Money</strong>
           <small>Default mobile money option.</small>
         </span>
       </label>
-      <label class="payment-option radio-card">
+      <label class="payment-option radio-card radio-row">
         <input type="radio" name="paymentMethod" value="Airtel Money" />
         <span>
           <strong>Airtel Money</strong>
@@ -1269,14 +1541,29 @@ async function shareTokaApp() {
   }
 }
 
-function logoutUser() {
-  Object.values(TOKA_STORAGE_KEYS).forEach((key) => {
+async function logoutUser() {
+  const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (client && client.auth) {
     try {
-      localStorage.removeItem(key);
+      await client.auth.signOut();
     } catch (error) {
-      // Ignore storage failures on logout.
+      // Fall back to local state cleanup even if Supabase sign-out fails.
     }
-  });
+  }
+
+  if (typeof window.setSupabaseOwnerUserId === 'function') {
+    window.setSupabaseOwnerUserId('');
+  }
+
+  TOKA_AUTH_STATE.session = null;
+  TOKA_AUTH_STATE.user = null;
+  TOKA_AUTH_STATE.isAuthenticated = false;
+  TOKA_AUTH_STATE.pendingScreenId = '';
+  TOKA_AUTH_STATE.feedbackMessage = '';
+  TOKA_AUTH_STATE.feedbackType = '';
+  closeAuthModal();
+  setAuthFeedback('');
+  renderAuthHeader();
   TOKA_APP_STATE.homeCategory = 'All';
   TOKA_APP_STATE.discoverCategory = 'All';
   TOKA_APP_STATE.discoverTimeFilter = 'All';
@@ -2057,6 +2344,26 @@ function goOnboardingBack() {
 }
 
 function bindGlobalEvents() {
+  const authForm = qs('#auth-form');
+  if (authForm) {
+    authForm.addEventListener('submit', handleAuthSubmit);
+  }
+
+  const authToggle = qs('#auth-toggle-mode');
+  if (authToggle) {
+    authToggle.addEventListener('click', toggleAuthMode);
+  }
+
+  const authForgot = qs('#auth-forgot-password');
+  if (authForgot) {
+    authForgot.addEventListener('click', handleForgotPassword);
+  }
+
+  const authClose = qs('#auth-close');
+  if (authClose) {
+    authClose.addEventListener('click', closeAuthModal);
+  }
+
   const discoverSearch = qs('#discover-search');
   if (discoverSearch) {
     discoverSearch.addEventListener('input', (event) => {
@@ -2190,13 +2497,32 @@ function initializeLandingState(onboardingDone) {
 
 async function initApp() {
   bindGlobalEvents();
-  if (typeof window.initializeSupabaseSync === 'function') {
+  renderAuthHeader();
+
+  if (typeof getSupabaseClient === 'function') {
+    const client = getSupabaseClient();
+    if (client && client.auth) {
+      const { data } = await client.auth.getSession();
+      await applyAuthSession(data ? data.session : null);
+      client.auth.onAuthStateChange((event, session) => {
+        applyAuthSession(session);
+        if (event === 'SIGNED_OUT') {
+          closeAuthModal();
+        }
+      });
+    }
+  }
+
+  renderAuthHeader();
+
+  if (TOKA_AUTH_STATE.isAuthenticated && typeof window.initializeSupabaseSync === 'function') {
     await window.initializeSupabaseSync();
   }
+
   const onboardingDone = getOnboardingComplete();
   seedMockComments();
   syncCalendarEntriesFromTickets();
-  if (typeof window.runFullSupabaseSync === 'function') {
+  if (TOKA_AUTH_STATE.isAuthenticated && typeof window.runFullSupabaseSync === 'function') {
     window.runFullSupabaseSync();
   }
   initializeLandingState(onboardingDone);
@@ -2228,6 +2554,10 @@ async function initApp() {
   renderCalendarScreen();
   if (qs('#host-price') && qs('#host-free')?.checked) {
     qs('#host-price').closest('.field-group')?.classList.add('hidden');
+  }
+
+  if (!TOKA_AUTH_STATE.isAuthenticated) {
+    renderAuthHeader();
   }
 }
 
@@ -2263,6 +2593,8 @@ window.changeCalendarMonth = changeCalendarMonth;
 window.goToTodayCalendarMonth = goToTodayCalendarMonth;
 window.openCalendarEventModal = openCalendarEventModal;
 window.closeCalendarEventModal = closeCalendarEventModal;
+window.openAuthModal = openAuthModal;
+window.closeAuthModal = closeAuthModal;
 window.openHostDashboard = openHostDashboard;
 window.clearHostThumbnail = clearHostThumbnail;
 window.startOnboarding = startOnboarding;
