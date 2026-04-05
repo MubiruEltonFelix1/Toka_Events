@@ -564,11 +564,14 @@ button:active,
     min-height: 44px;
     padding: 0;
     text-align: left;
+    min-width: 0;
+    flex: 1;
 }
 
 .brand-lockup .brand-copy {
     display: grid;
     gap: 2px;
+    min-width: 0;
 }
 
 .brand-lockup .brand-title {
@@ -1773,10 +1776,17 @@ textarea {
     .brand-lockup {
         gap: 10px;
     }
-    .brand-lockup .brand-copy,
-    .brand-lockup .eyebrow,
-    .brand-lockup .brand-title {
+    .brand-lockup .eyebrow {
         display: none;
+    }
+    .brand-lockup .brand-copy {
+        display: block;
+    }
+    .brand-lockup .brand-title {
+        display: block;
+        font-size: 0.82rem;
+        line-height: 1.2;
+        letter-spacing: 0;
     }
     .auth-header-actions {
         gap: 8px;
@@ -1845,7 +1855,7 @@ textarea {
         padding: 1rem;
         gap: 12px;
     }
-    .hero-card > .card:last-child {
+    .hero-card>.card:last-child {
         display: none;
     }
     .detail-footer-inner {
