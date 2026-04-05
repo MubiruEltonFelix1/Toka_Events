@@ -171,7 +171,7 @@ function upsertProfileCloud() {
         updated_at: new Date().toISOString()
     };
 
-    queueSupabaseWrite(async () => {
+    queueSupabaseWrite(async() => {
         await client.from(TOKA_SUPABASE_TABLES.profiles).upsert(payload, { onConflict: 'device_id' });
     });
 }
@@ -195,7 +195,7 @@ function upsertEventCloud(event) {
         updated_at: new Date().toISOString()
     };
 
-    queueSupabaseWrite(async () => {
+    queueSupabaseWrite(async() => {
         await client.from(TOKA_SUPABASE_TABLES.events).upsert(payload, { onConflict: 'device_id,id' });
     });
 }
@@ -219,7 +219,7 @@ function upsertTicketCloud(ticket) {
         updated_at: new Date().toISOString()
     };
 
-    queueSupabaseWrite(async () => {
+    queueSupabaseWrite(async() => {
         await client.from(TOKA_SUPABASE_TABLES.tickets).upsert(payload, { onConflict: 'device_id,id' });
     });
 }
@@ -244,7 +244,7 @@ function upsertCommentCloud(eventId, comment) {
         updated_at: new Date().toISOString()
     };
 
-    queueSupabaseWrite(async () => {
+    queueSupabaseWrite(async() => {
         await client.from(TOKA_SUPABASE_TABLES.comments).upsert(payload, { onConflict: 'device_id,id' });
     });
 }
@@ -269,7 +269,7 @@ function upsertUpdateCloud(eventId, update) {
         updated_at: new Date().toISOString()
     };
 
-    queueSupabaseWrite(async () => {
+    queueSupabaseWrite(async() => {
         await client.from(TOKA_SUPABASE_TABLES.updates).upsert(payload, { onConflict: 'device_id,id' });
     });
 }
@@ -293,7 +293,7 @@ function upsertCalendarEntryCloud(entry) {
         updated_at: new Date().toISOString()
     };
 
-    queueSupabaseWrite(async () => {
+    queueSupabaseWrite(async() => {
         await client.from(TOKA_SUPABASE_TABLES.calendarEntries).upsert(payload, { onConflict: 'device_id,event_id' });
     });
 }
@@ -317,7 +317,7 @@ function upsertEventMetricCloud(eventId, metric) {
         updated_at: new Date().toISOString()
     };
 
-    queueSupabaseWrite(async () => {
+    queueSupabaseWrite(async() => {
         await client.from(TOKA_SUPABASE_TABLES.eventMetrics).upsert(payload, { onConflict: 'device_id,event_id' });
     });
 }
@@ -341,7 +341,7 @@ async function pullSupabaseIntoLocalStorage() {
     const remoteProfile = profileRows[0] || null;
     if (remoteProfile && remoteProfile.payload) {
         const localProfile = getUserProfile();
-        writeStorage(TOKA_STORAGE_KEYS.userProfile, { ...localProfile, ...remoteProfile.payload });
+        writeStorage(TOKA_STORAGE_KEYS.userProfile, {...localProfile, ...remoteProfile.payload });
         setOnboardingComplete(Boolean(remoteProfile.onboarding_complete));
         if (remoteProfile.referral_code) {
             setReferralCode(remoteProfile.referral_code);
