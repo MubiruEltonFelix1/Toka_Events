@@ -1692,6 +1692,9 @@ async function logoutUser() {
   if (typeof window.setSupabaseOwnerUserId === 'function') {
     window.setSupabaseOwnerUserId('');
   }
+  if (typeof window.stopSupabaseAutoSync === 'function') {
+    window.stopSupabaseAutoSync();
+  }
 
   TOKA_AUTH_STATE.session = null;
   TOKA_AUTH_STATE.user = null;
@@ -2648,6 +2651,13 @@ function initializeLandingState() {
 
 async function initApp() {
   bindGlobalEvents();
+  window.addEventListener('toka:cloud-events-updated', () => {
+    renderHome();
+    renderDiscover();
+    if (TOKA_APP_STATE.currentScreen === 'screen-host-dashboard') {
+      renderHostDashboard();
+    }
+  });
   renderAuthHeader();
 
   if (typeof getSupabaseClient === 'function') {

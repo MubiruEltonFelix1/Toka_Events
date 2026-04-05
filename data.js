@@ -24,6 +24,8 @@ const TOKA_SUPABASE_TABLES = {
 let TOKA_SUPABASE_CLIENT = null;
 let TOKA_SUPABASE_BOOTSTRAPPED = false;
 let TOKA_SUPABASE_USER_ID = '';
+let TOKA_SUPABASE_SYNC_INTERVAL_ID = null;
+const TOKA_SUPABASE_SYNC_INTERVAL_MS = 20000;
 
 function reportSupabaseError(context, error) {
     const message = error && (error.message || error.details || error.hint) ? (error.message || error.details || error.hint) : String(error || 'Unknown Supabase error');
@@ -155,6 +157,31 @@ async function supabaseSelect(table) {
     if (error || !Array.isArray(data)) {
         if (error) {
             reportSupabaseError(`select.${table}`, error);
+        }
+        return [];
+    }
+
+    return data;
+}
+
+async function supabaseSelectSharedEvents() {
+    const client = getSupabaseClient();
+    if (!client) {
+        return [];
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return [];
+    }
+
+    const { data, error } = await client
+        .from(TOKA_SUPABASE_TABLES.events)
+        .select('*');
+
+    if (error || !Array.isArray(data)) {
+        if (error) {
+            reportSupabaseError('select.sharedEvents', error);
         }
         return [];
     }
@@ -376,7 +403,7 @@ async function pullSupabaseIntoLocalStorage() {
 
     const [profileRows, eventRows, ticketRows, commentRows, updateRows, calendarRows, metricRows] = await Promise.all([
         supabaseSelect(TOKA_SUPABASE_TABLES.profiles),
-        supabaseSelect(TOKA_SUPABASE_TABLES.events),
+        supabaseSelectSharedEvents(),
         supabaseSelect(TOKA_SUPABASE_TABLES.tickets),
         supabaseSelect(TOKA_SUPABASE_TABLES.comments),
         supabaseSelect(TOKA_SUPABASE_TABLES.updates),
@@ -465,6 +492,44 @@ async function pullSupabaseIntoLocalStorage() {
     });
 }
 
+function notifyCloudEventsUpdated() {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
+        return;
+    }
+    window.dispatchEvent(new CustomEvent('toka:cloud-events-updated'));
+}
+
+async function syncSharedEventsFromCloud() {
+    const ownerUserId = await ensureSupabaseAuth();
+    if (!ownerUserId) {
+        return false;
+    }
+
+    const eventRows = await supabaseSelectSharedEvents();
+    const remoteEvents = pickLatestRowsByKey(eventRows, 'id').map((row) => row.payload).filter(Boolean);
+    if (remoteEvents.length) {
+        writeStorage(TOKA_STORAGE_KEYS.events, mergeById(getSavedEvents(), remoteEvents));
+        notifyCloudEventsUpdated();
+    }
+    return true;
+}
+
+function stopSupabaseAutoSync() {
+    if (TOKA_SUPABASE_SYNC_INTERVAL_ID) {
+        clearInterval(TOKA_SUPABASE_SYNC_INTERVAL_ID);
+        TOKA_SUPABASE_SYNC_INTERVAL_ID = null;
+    }
+}
+
+function startSupabaseAutoSync() {
+    stopSupabaseAutoSync();
+    TOKA_SUPABASE_SYNC_INTERVAL_ID = setInterval(() => {
+        syncSharedEventsFromCloud().catch((error) => {
+            reportSupabaseError('autoSync.sharedEvents', error);
+        });
+    }, TOKA_SUPABASE_SYNC_INTERVAL_MS);
+}
+
 function pushLocalSnapshotToSupabase() {
     if (!getSupabaseClient()) {
         return;
@@ -500,6 +565,8 @@ async function initializeSupabaseSync() {
 
     await pullSupabaseIntoLocalStorage();
     pushLocalSnapshotToSupabase();
+    startSupabaseAutoSync();
+    notifyCloudEventsUpdated();
     return true;
 }
 
@@ -547,6 +614,9 @@ window.initializeSupabaseSync = initializeSupabaseSync;
 window.runFullSupabaseSync = pushLocalSnapshotToSupabase;
 window.debugSupabaseConnection = debugSupabaseConnection;
 window.setSupabaseOwnerUserId = setSupabaseOwnerUserId;
+window.syncSharedEventsFromCloud = syncSharedEventsFromCloud;
+window.startSupabaseAutoSync = startSupabaseAutoSync;
+window.stopSupabaseAutoSync = stopSupabaseAutoSync;
 
 const TOKA_PUBLIC_HOLIDAYS = [
     { id: 'hol-2026-01-01', date: '2026-01-01', name: "New Year's Day", scope: 'National' },

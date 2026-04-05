@@ -586,7 +586,7 @@ alter table public.toka_updates enable row level security;
 alter table public.toka_calendar_entries enable row level security;
 alter table public.toka_event_metrics enable row level security;
 
--- Production policy: only authenticated owner can read/write their own rows.
+-- Production policy: owner-only writes, with shared authenticated reads for events.
 do $$
 begin
     drop policy if exists toka_profiles_anon_rw on public.toka_profiles;
@@ -609,6 +609,12 @@ begin
             for all
             using (auth.uid() is not null and owner_user_id = auth.uid())
             with check (auth.uid() is not null and owner_user_id = auth.uid());
+    end if;
+
+    if not exists (select 1 from pg_policies where policyname = 'toka_events_authenticated_read') then
+        create policy toka_events_authenticated_read on public.toka_events
+            for select
+            using (auth.uid() is not null);
     end if;
 
     if not exists (select 1 from pg_policies where policyname = 'toka_tickets_owner_rw') then
