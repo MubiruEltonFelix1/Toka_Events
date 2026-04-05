@@ -181,7 +181,7 @@ function openAuthModal(mode = 'signin', message = '') {
         forgotButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode === 'signup');
     }
     if (resendButton) {
-      resendButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
+        resendButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
     }
 
     if (modal) {
@@ -237,7 +237,7 @@ async function handleAuthSubmit(event) {
 
     try {
         if (TOKA_AUTH_STATE.authMode === 'signup') {
-        const { data, error } = await client.auth.signUp({
+            const { data, error } = await client.auth.signUp({
                 email,
                 password,
                 options: {
@@ -248,11 +248,11 @@ async function handleAuthSubmit(event) {
                 throw error;
             }
 
-        const isRepeatedSignup = Boolean(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0);
-        if (isRepeatedSignup) {
-          setAuthFeedback('This email already exists. Sign in or resend confirmation email if not yet verified.', 'info');
-          return;
-        }
+            const isRepeatedSignup = Boolean(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0);
+            if (isRepeatedSignup) {
+                setAuthFeedback('This email already exists. Sign in or resend confirmation email if not yet verified.', 'info');
+                return;
+            }
 
             setAuthFeedback('Check your email to confirm your account.', 'success');
             if (passwordInput) {
@@ -320,35 +320,35 @@ async function handleForgotPassword() {
 }
 
 async function handleResendConfirmation() {
-  const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-  const emailInput = qs('#auth-email');
-  const email = emailInput ? emailInput.value.trim() : '';
+    const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    const emailInput = qs('#auth-email');
+    const email = emailInput ? emailInput.value.trim() : '';
 
-  if (!client || !client.auth) {
-    setAuthFeedback('Supabase auth is not configured in this browser session.');
-    return;
-  }
-  if (!email) {
-    setAuthFeedback('Enter your email first.');
-    return;
-  }
-
-  try {
-    const { error } = await client.auth.resend({
-      type: 'signup',
-      email,
-      options: {
-        emailRedirectTo: getAuthRedirectUrl()
-      }
-    });
-    if (error) {
-      throw error;
+    if (!client || !client.auth) {
+        setAuthFeedback('Supabase auth is not configured in this browser session.');
+        return;
     }
-    setAuthFeedback('Confirmation email resent. Check inbox and spam folders.', 'success');
-  } catch (error) {
-    const message = error && error.message ? error.message : 'Could not resend confirmation email.';
-    setAuthFeedback(message);
-  }
+    if (!email) {
+        setAuthFeedback('Enter your email first.');
+        return;
+    }
+
+    try {
+        const { error } = await client.auth.resend({
+            type: 'signup',
+            email,
+            options: {
+                emailRedirectTo: getAuthRedirectUrl()
+            }
+        });
+        if (error) {
+            throw error;
+        }
+        setAuthFeedback('Confirmation email resent. Check inbox and spam folders.', 'success');
+    } catch (error) {
+        const message = error && error.message ? error.message : 'Could not resend confirmation email.';
+        setAuthFeedback(message);
+    }
 }
 
 async function applyAuthSession(session) {
