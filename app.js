@@ -92,8 +92,8 @@ function isAuthenticatedUser() {
 }
 
 function getAuthRedirectUrl() {
-  const path = window.location.pathname || '/';
-  return `${window.location.origin}${path}`;
+    const path = window.location.pathname || '/';
+    return `${window.location.origin}${path}`;
 }
 
 function getAuthEmailLabel() {
@@ -233,13 +233,13 @@ async function handleAuthSubmit(event) {
 
     try {
         if (TOKA_AUTH_STATE.authMode === 'signup') {
-        const { error } = await client.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: getAuthRedirectUrl()
-          }
-        });
+            const { error } = await client.auth.signUp({
+                email,
+                password,
+                options: {
+                    emailRedirectTo: getAuthRedirectUrl()
+                }
+            });
             if (error) {
                 throw error;
             }
@@ -296,7 +296,7 @@ async function handleForgotPassword() {
 
     try {
         const { error } = await client.auth.resetPasswordForEmail(email, {
-        redirectTo: getAuthRedirectUrl()
+            redirectTo: getAuthRedirectUrl()
         });
         if (error) {
             throw error;
