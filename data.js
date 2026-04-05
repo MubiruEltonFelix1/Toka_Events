@@ -25,6 +25,19 @@ let TOKA_SUPABASE_CLIENT = null;
 let TOKA_SUPABASE_BOOTSTRAPPED = false;
 let TOKA_SUPABASE_USER_ID = '';
 
+function reportSupabaseError(context, error) {
+    const message = error && (error.message || error.details || error.hint) ? (error.message || error.details || error.hint) : String(error || 'Unknown Supabase error');
+    const payload = {
+        context,
+        message,
+        at: new Date().toISOString()
+    };
+    window.TOKA_LAST_SUPABASE_ERROR = payload;
+    if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[TOKA][Supabase]', context, error || message);
+    }
+}
+
 function getDeviceId() {
     const existing = readStorage(TOKA_STORAGE_KEYS.deviceId, '');
     if (existing) {
@@ -84,6 +97,7 @@ async function ensureSupabaseAuth() {
 
     const { data: signInData, error } = await client.auth.signInAnonymously();
     if (error) {
+        reportSupabaseError('auth.signInAnonymously', error);
         return '';
     }
 
@@ -94,8 +108,8 @@ async function ensureSupabaseAuth() {
 function queueSupabaseWrite(operation) {
     Promise.resolve()
         .then(operation)
-        .catch(() => {
-            // Keep UI resilient when offline or Supabase is not configured.
+        .catch((error) => {
+            reportSupabaseError('queueSupabaseWrite', error);
         });
 }
 
@@ -145,6 +159,9 @@ async function supabaseSelect(table) {
         .eq('device_id', getDeviceId());
 
     if (error || !Array.isArray(data)) {
+        if (error) {
+            reportSupabaseError(`select.${table}`, error);
+        }
         return [];
     }
 
@@ -460,8 +477,49 @@ async function initializeSupabaseSync() {
     return true;
 }
 
+async function debugSupabaseConnection() {
+    const client = getSupabaseClient();
+    if (!client) {
+        return {
+            ok: false,
+            reason: 'Supabase client not initialized. Check URL and key config.'
+        };
+    }
+
+    const ownerUserId = await ensureSupabaseAuth();
+    if (!ownerUserId) {
+        return {
+            ok: false,
+            reason: 'Anonymous auth failed. Check Supabase Auth provider settings and URL config.',
+            lastError: window.TOKA_LAST_SUPABASE_ERROR || null
+        };
+    }
+
+    const { error } = await client
+        .from(TOKA_SUPABASE_TABLES.profiles)
+        .select('device_id')
+        .eq('owner_user_id', ownerUserId)
+        .limit(1);
+
+    if (error) {
+        reportSupabaseError('debug.selectProfiles', error);
+        return {
+            ok: false,
+            reason: 'Profile table select failed. Likely schema mismatch or RLS policy mismatch.',
+            lastError: window.TOKA_LAST_SUPABASE_ERROR || null
+        };
+    }
+
+    return {
+        ok: true,
+        ownerUserId,
+        deviceId: getDeviceId()
+    };
+}
+
 window.initializeSupabaseSync = initializeSupabaseSync;
 window.runFullSupabaseSync = pushLocalSnapshotToSupabase;
+window.debugSupabaseConnection = debugSupabaseConnection;
 
 const TOKA_PUBLIC_HOLIDAYS = [
     { id: 'hol-2026-01-01', date: '2026-01-01', name: "New Year's Day", scope: 'National' },
