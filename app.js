@@ -176,7 +176,7 @@ function isAuthenticatedUser() {
 function hasCompletedUserProfile() {
     const profile = getUserProfile() || {};
     const interests = Array.isArray(profile.interests) ? profile.interests : [];
-    return Boolean(getOnboardingComplete() && profile.name && profile.phone && interests.length);
+  return Boolean(getOnboardingComplete() && interests.length);
 }
 
 function getAuthRedirectUrl() {
@@ -292,7 +292,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-21`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-22`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -2963,13 +2963,6 @@ function renderOnboarding() {
       <h2>Tell us what you're into</h2>
       <div class="chip-grid" id="onboarding-interests"></div>
     </div>
-    <div class="onboarding-slide ${TOKA_APP_STATE.onboardingStep === 3 ? 'active' : ''}" data-slide="3">
-      <h2>Almost there</h2>
-      <div class="form-stack">
-        <input id="onboarding-name" type="text" placeholder="Your name" value="${escapeHtml(profile.name || '')}" />
-        <input id="onboarding-phone" type="tel" placeholder="+256 700 000 000" value="${escapeHtml(profile.phone || '')}" />
-      </div>
-    </div>
   `;
 
   const interestContainer = qs('#onboarding-interests');
@@ -2980,9 +2973,9 @@ function renderOnboarding() {
     `).join('');
   }
 
-  dots.innerHTML = [1, 2, 3].map((index) => `<span class="dot ${TOKA_APP_STATE.onboardingStep === index ? 'active' : ''}"></span>`).join('');
+  dots.innerHTML = [1, 2].map((index) => `<span class="dot ${TOKA_APP_STATE.onboardingStep === index ? 'active' : ''}"></span>`).join('');
 
-  if (TOKA_APP_STATE.onboardingStep < 3) {
+  if (TOKA_APP_STATE.onboardingStep < 2) {
     cta.textContent = 'Next →';
   } else {
     cta.textContent = `Let's go →`;
@@ -3009,36 +3002,21 @@ function goOnboardingNext() {
       return;
     }
   }
-  if (TOKA_APP_STATE.onboardingStep < 3) {
+  if (TOKA_APP_STATE.onboardingStep < 2) {
     TOKA_APP_STATE.onboardingStep += 1;
     renderOnboarding();
     return;
   }
 
-  const name = qs('#onboarding-name')?.value.trim();
-  const phoneRaw = qs('#onboarding-phone')?.value.trim();
   const profile = getUserProfile();
-  if (!name || !phoneRaw || !(profile.interests || []).length) {
-    toast('Add your name, phone, and at least one interest.');
+  if (!(profile.interests || []).length) {
+    toast('Select at least one interest.');
     return;
   }
 
-  const normalizedPhone = validateAndNormalizePhoneInput(phoneRaw, profile.phoneCountryCode || '+256');
-  if (!normalizedPhone.ok) {
-    toast(normalizedPhone.error);
-    return;
-  }
-
-  saveUserProfile({
-    name,
-    phone: normalizedPhone.e164,
-    phoneCountryCode: normalizedPhone.countryCode,
-    phoneNationalNumber: normalizedPhone.localNumber,
-    interests: profile.interests || []
-  });
   setOnboardingComplete(true);
-  if (!getReferralCode()) {
-    setReferralCode(generateReferralCode(name));
+  if (!getReferralCode() && profile.name) {
+    setReferralCode(generateReferralCode(profile.name));
   }
   renderHome();
   renderDiscover();

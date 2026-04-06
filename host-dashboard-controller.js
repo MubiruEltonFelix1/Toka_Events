@@ -675,6 +675,13 @@
         else acc.unknown += 1;
         return acc;
       }, { female: 0, male: 0, unknown: 0 });
+    const knownGenderCount = genderSummary.female + genderSummary.male;
+    const totalGenderRecords = knownGenderCount + genderSummary.unknown;
+    const qualityMessage = totalGenderRecords === 0
+      ? 'No attendee profile data yet. Gender quality will appear as registrations come in.'
+      : genderSummary.unknown > 0
+        ? `Unknown gender records: ${genderSummary.unknown}. Encourage attendees to complete full profile data during signup.`
+        : 'Unknown gender records: 0. Great data quality: all current attendee records have gender filled.';
 
     const attendeeRows = audience.attendees.map((entry) => `
       <tr>
@@ -720,7 +727,7 @@
         <div class="host-panel-head">
           <h3>Audience Data Quality</h3>
         </div>
-        <p class="text-muted">Unknown gender records: ${genderSummary.unknown}. Encourage attendees to complete full profile data during signup.</p>
+        <p class="text-muted">${qualityMessage}</p>
       </section>
     `;
   }
