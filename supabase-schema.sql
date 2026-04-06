@@ -614,6 +614,40 @@ $$;
 revoke all on function public.toka_delete_event_global(text) from public;
 grant execute on function public.toka_delete_event_global(text) to authenticated;
 
+-- Full account deletion RPC.
+-- Deletes all caller-owned rows and the auth user record.
+create or replace function public.toka_delete_my_account()
+returns boolean
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+    caller_id uuid := auth.uid();
+begin
+    if caller_id is null then
+        raise exception 'Authentication required';
+    end if;
+
+    delete from public.toka_tickets where owner_user_id = caller_id;
+    delete from public.toka_comments where owner_user_id = caller_id;
+    delete from public.toka_updates where owner_user_id = caller_id;
+    delete from public.toka_calendar_entries where owner_user_id = caller_id;
+    delete from public.toka_event_metrics where owner_user_id = caller_id;
+    delete from public.toka_events where owner_user_id = caller_id;
+    delete from public.toka_profiles where owner_user_id = caller_id;
+
+    -- Remove auth identities first for compatibility, then user record.
+    delete from auth.identities where user_id = caller_id;
+    delete from auth.users where id = caller_id;
+
+    return true;
+end;
+$$;
+
+revoke all on function public.toka_delete_my_account() from public;
+grant execute on function public.toka_delete_my_account() to authenticated;
+
 -- ML-oriented views.
 -- Drop first so Postgres does not attempt in-place column rename/order changes
 -- when view definitions evolve.

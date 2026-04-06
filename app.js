@@ -292,7 +292,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-22`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-23`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -2021,6 +2021,7 @@ function renderProfile() {
       </div>
       <button type="button" class="settings-item" onclick="shareTokaApp()"><span>Share Toka</span><span>↗</span></button>
       <button type="button" class="settings-item" onclick="aboutToka()"><span>About Toka</span><span>i</span></button>
+      <button type="button" class="settings-item danger" onclick="deleteUserAccount()"><span>Delete Account</span><span>⛔</span></button>
       <button type="button" class="settings-item danger" onclick="logoutUser()"><span>Logout</span><span>⎋</span></button>
     `;
     updateInstallCtaVisibility();
@@ -2154,6 +2155,83 @@ async function shareTokaApp() {
     }
   } catch (error) {
     await copyToClipboard(shareText);
+  }
+}
+
+async function deleteUserAccount() {
+  if (!isAuthenticatedUser()) {
+    openAuthModal('signin', 'Sign in first to delete your account.');
+    return;
+  }
+
+  const confirmed = window.confirm('Delete your account permanently? This will remove your profile, hosted events, tickets, comments, updates, and metrics from Supabase. This action cannot be undone.');
+  if (!confirmed) {
+    return;
+  }
+
+  const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (!client) {
+    toast('Supabase is not configured in this session.');
+    return;
+  }
+
+  try {
+    const { error } = await client.rpc('toka_delete_my_account');
+    if (error) {
+      throw error;
+    }
+
+    if (client.auth) {
+      try {
+        await client.auth.signOut();
+      } catch (signOutError) {
+        // Continue with local cleanup even if sign-out fails.
+      }
+    }
+
+    if (typeof window.setSupabaseOwnerUserId === 'function') {
+      window.setSupabaseOwnerUserId('');
+    }
+    if (typeof window.stopSupabaseAutoSync === 'function') {
+      window.stopSupabaseAutoSync();
+    }
+    if (typeof window.clearCachedCloudData === 'function') {
+      window.clearCachedCloudData({ preservePublicEvents: false });
+    }
+
+    try {
+      localStorage.removeItem(TOKA_STORAGE_KEYS.userProfile);
+      localStorage.removeItem(TOKA_STORAGE_KEYS.onboardingComplete);
+      localStorage.removeItem(TOKA_STORAGE_KEYS.referralCode);
+    } catch (storageError) {
+      // no-op
+    }
+
+    TOKA_AUTH_STATE.session = null;
+    TOKA_AUTH_STATE.user = null;
+    TOKA_AUTH_STATE.isAuthenticated = false;
+    TOKA_AUTH_STATE.pendingScreenId = '';
+    TOKA_AUTH_STATE.feedbackMessage = '';
+    TOKA_AUTH_STATE.feedbackType = '';
+    TOKA_APP_STATE.onboardingStep = 1;
+    TOKA_APP_STATE.hostStep = 1;
+    TOKA_APP_STATE.homeCategory = 'All';
+    TOKA_APP_STATE.discoverCategory = 'All';
+    TOKA_APP_STATE.discoverTimeFilter = 'All';
+    TOKA_APP_STATE.discoverQuery = '';
+
+    closeAuthModal();
+    setAuthFeedback('');
+    renderAuthHeader();
+    renderHome();
+    renderDiscover();
+    renderTickets();
+    renderProfile();
+    showScreen('screen-home');
+    toast('Account deleted successfully.');
+  } catch (error) {
+    const message = error && error.message ? error.message : 'Could not delete account right now.';
+    toast(message);
   }
 }
 
@@ -3281,6 +3359,7 @@ window.aboutToka = aboutToka;
 window.copyToClipboard = copyToClipboard;
 window.shareTicket = shareTicket;
 window.shareTokaApp = shareTokaApp;
+window.deleteUserAccount = deleteUserAccount;
 window.logoutUser = logoutUser;
 window.goHostNext = goHostNext;
 window.goHostBack = goHostBack;
