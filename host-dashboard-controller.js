@@ -1,370 +1,370 @@
 (function initHostDashboardController() {
-  function getRouteFromHash() {
-    const hash = String(window.location.hash || '').toLowerCase();
-    if (!hash.startsWith('#/host/')) {
-      return 'dashboard';
-    }
-    return hash.replace('#/host/', '').split('?')[0] || 'dashboard';
-  }
-
-  function getHostedEventsSafe() {
-    if (typeof getHostedEvents === 'function') {
-      return getHostedEvents();
-    }
-    return [];
-  }
-
-  function getTicketsSafe() {
-    if (typeof getTickets === 'function') {
-      return getTickets();
-    }
-    return [];
-  }
-
-  function getMetricSafe(eventId) {
-    if (typeof getEventMetric === 'function') {
-      return getEventMetric(eventId) || {};
-    }
-    return {};
-  }
-
-  function daysUntilEvent(dateString) {
-    const eventDate = new Date(`${dateString}T12:00:00`);
-    if (Number.isNaN(eventDate.getTime())) {
-      return 999;
-    }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
-  }
-
-  function getEventHealthAlerts(events) {
-    const alerts = [];
-
-    events.forEach((event) => {
-      const metric = getMetricSafe(event.id);
-      const impressions = Number(metric.impressions || 0);
-      const sold = Number(metric.ticketSalesCount || 0);
-      const capacity = Number(event.capacity || 0);
-      const registered = Number(event.registered || 0);
-      const conversion = impressions > 0 ? (sold / impressions) * 100 : 0;
-      const fillRate = capacity > 0 ? (registered / capacity) * 100 : 0;
-      const daysLeft = daysUntilEvent(event.date);
-
-      if (impressions >= 120 && conversion < 1.2) {
-        alerts.push({
-          severity: 'high',
-          message: `${event.name}: low conversion (${conversion.toFixed(1)}%). Consider pricing or copy updates.`
-        });
-      }
-
-      if (daysLeft <= 7 && daysLeft >= 0 && fillRate < 35) {
-        alerts.push({
-          severity: 'medium',
-          message: `${event.name}: event is ${daysLeft}d away with only ${fillRate.toFixed(1)}% capacity filled.`
-        });
-      }
-
-      if (fillRate >= 85 && daysLeft > 0) {
-        alerts.push({
-          severity: 'low',
-          message: `${event.name}: strong demand (${fillRate.toFixed(1)}% filled). Consider opening more inventory.`
-        });
-      }
-    });
-
-    return alerts.slice(0, 6);
-  }
-
-  function getFinanceSnapshot(events) {
-    const totals = events.reduce((acc, event) => {
-      const metric = getMetricSafe(event.id);
-      const revenue = Number(metric.ticketRevenueTotal || 0);
-      const eventDaysLeft = daysUntilEvent(event.date);
-      acc.gross += revenue;
-      if (eventDaysLeft > 0) {
-        acc.pending += revenue;
-      }
-      if (eventDaysLeft <= 0) {
-        acc.completed += revenue;
-      }
-      return acc;
-    }, { gross: 0, pending: 0, completed: 0 });
-
-    const estimatedFees = totals.gross * 0.08;
-    const estimatedNet = totals.gross - estimatedFees;
-    return {
-      gross: totals.gross,
-      pending: totals.pending,
-      completed: totals.completed,
-      estimatedFees,
-      estimatedNet
-    };
-  }
-
-  function toCsvCell(value) {
-    const text = String(value == null ? '' : value);
-    const escaped = text.replace(/"/g, '""');
-    return `"${escaped}"`;
-  }
-
-  function buildEventsCsv(events) {
-    const header = [
-      'Event Name',
-      'Date',
-      'City',
-      'Capacity',
-      'Registered',
-      'Tickets Sold',
-      'Impressions',
-      'Conversion %',
-      'Revenue'
-    ];
-
-    const rows = events.map((event) => {
-      const metric = getMetricSafe(event.id);
-      const impressions = Number(metric.impressions || 0);
-      const sold = Number(metric.ticketSalesCount || 0);
-      const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(2) : '0.00';
-      return [
-        event.name || 'Untitled',
-        event.date || '',
-        event.city || '',
-        Number(event.capacity || 0),
-        Number(event.registered || 0),
-        sold,
-        impressions,
-        conversion,
-        Number(metric.ticketRevenueTotal || 0)
-      ];
-    });
-
-    const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(','));
-    return csvLines.join('\n');
-  }
-
-  function toDomId(value) {
-    return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '-');
-  }
-
-  function clampNumber(value, min, max) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) {
-      return min;
-    }
-    return Math.max(min, Math.min(max, num));
-  }
-
-  function getTicketingConfig(event) {
-    const metadata = event && typeof event.metadata === 'object' && event.metadata ? event.metadata : {};
-    const ticketing = metadata.ticketing && typeof metadata.ticketing === 'object' ? metadata.ticketing : {};
-    const tiers = Array.isArray(ticketing.tiers) ? ticketing.tiers : [];
-
-    const findTierPrice = (name, fallback) => {
-      const found = tiers.find((tier) => String(tier.name || '').toLowerCase() === name.toLowerCase());
-      return Number(found && Number.isFinite(Number(found.price)) ? found.price : fallback);
-    };
-
-    const basePrice = Number(event.price || 0);
-    return {
-      reservePercent: clampNumber(ticketing.reservePercent == null ? 10 : ticketing.reservePercent, 0, 50),
-      earlyBirdPrice: findTierPrice('Early Bird', Math.max(basePrice * 0.75, 0)),
-      regularPrice: findTierPrice('Regular', basePrice),
-      vipPrice: findTierPrice('VIP', Math.max(basePrice * 1.5, 0))
-    };
-  }
-
-  function getEventByIdSafe(eventId) {
-    if (typeof getEventById === 'function') {
-      return getEventById(eventId);
-    }
-    const hosted = getHostedEventsSafe();
-    return hosted.find((event) => event.id === eventId) || null;
-  }
-
-  function saveTicketingConfig(eventId) {
-    const event = getEventByIdSafe(eventId);
-    if (!event || typeof saveEvent !== 'function') {
-      if (typeof toast === 'function') {
-        toast('Could not update ticket settings for this event.');
-      }
-      return;
-    }
-
-    const domId = toDomId(eventId);
-    const reserveInput = document.getElementById(`tier-reserve-${domId}`);
-    const earlyInput = document.getElementById(`tier-early-${domId}`);
-    const regularInput = document.getElementById(`tier-regular-${domId}`);
-    const vipInput = document.getElementById(`tier-vip-${domId}`);
-
-    if (!reserveInput || !earlyInput || !regularInput || !vipInput) {
-      return;
-    }
-
-    const reservePercent = clampNumber(reserveInput.value, 0, 50);
-    const earlyBirdPrice = clampNumber(earlyInput.value, 0, 999999999);
-    const regularPrice = clampNumber(regularInput.value, 0, 999999999);
-    const vipPrice = clampNumber(vipInput.value, 0, 999999999);
-
-    const capacity = Math.max(0, Number(event.capacity || 0));
-    const reserveCount = Math.floor(capacity * (reservePercent / 100));
-
-    const nextMetadata = {
-      ...(event.metadata && typeof event.metadata === 'object' ? event.metadata : {}),
-      ticketing: {
-        reservePercent,
-        reserveCount,
-        tiers: [
-          { name: 'Early Bird', price: earlyBirdPrice, allocationPercent: 25 },
-          { name: 'Regular', price: regularPrice, allocationPercent: 60 },
-          { name: 'VIP', price: vipPrice, allocationPercent: 15 }
-        ]
-      }
-    };
-
-    saveEvent({ ...event, metadata: nextMetadata });
-    if (typeof toast === 'function') {
-      toast('Ticket tiers and reserve saved.');
-    }
-    render();
-  }
-
-  function getHostedEventIdSet(events) {
-    return new Set((events || []).map((event) => String(event.id || '')));
-  }
-
-  function getRefundRequests(events) {
-    const hostedIds = getHostedEventIdSet(events);
-    const tickets = getTicketsSafe();
-
-    return tickets
-      .filter((ticket) => hostedIds.has(String(ticket.eventId || '')))
-      .filter((ticket) => {
-        const status = String(ticket.refundStatus || '').toLowerCase();
-        return Boolean(ticket.refundRequested) || ['pending', 'requested', 'approved', 'rejected'].includes(status);
-      })
-      .map((ticket) => {
-        const status = String(ticket.refundStatus || (ticket.refundRequested ? 'pending' : '') || 'pending').toLowerCase();
-        const event = events.find((item) => item.id === ticket.eventId);
-        return {
-          id: ticket.id,
-          eventName: event ? event.name : 'Unknown Event',
-          attendee: ticket.name || ticket.email || ticket.phone || 'Unknown attendee',
-          amount: Number(ticket.amount || ticket.price || 0),
-          reason: ticket.refundReason || 'No reason supplied',
-          requestedAt: ticket.refundRequestedAt || ticket.createdAt || '',
-          status
-        };
-      })
-      .sort((a, b) => {
-        const statusOrder = { pending: 0, requested: 0, approved: 1, rejected: 2 };
-        const left = statusOrder[a.status] != null ? statusOrder[a.status] : 3;
-        const right = statusOrder[b.status] != null ? statusOrder[b.status] : 3;
-        if (left !== right) {
-          return left - right;
+        function getRouteFromHash() {
+            const hash = String(window.location.hash || '').toLowerCase();
+            if (!hash.startsWith('#/host/')) {
+                return 'dashboard';
+            }
+            return hash.replace('#/host/', '').split('?')[0] || 'dashboard';
         }
-        return String(b.requestedAt || '').localeCompare(String(a.requestedAt || ''));
-      });
-  }
 
-  function updateRefundStatus(ticketId, status) {
-    if (typeof getTickets !== 'function' || typeof saveTicket !== 'function') {
-      return;
-    }
+        function getHostedEventsSafe() {
+            if (typeof getHostedEvents === 'function') {
+                return getHostedEvents();
+            }
+            return [];
+        }
 
-    const tickets = getTickets();
-    const ticket = tickets.find((item) => item.id === ticketId);
-    if (!ticket) {
-      return;
-    }
+        function getTicketsSafe() {
+            if (typeof getTickets === 'function') {
+                return getTickets();
+            }
+            return [];
+        }
 
-    const nextTicket = {
-      ...ticket,
-      refundRequested: true,
-      refundStatus: status,
-      refundResolvedAt: new Date().toISOString()
-    };
+        function getMetricSafe(eventId) {
+            if (typeof getEventMetric === 'function') {
+                return getEventMetric(eventId) || {};
+            }
+            return {};
+        }
 
-    saveTicket(nextTicket);
-    if (typeof toast === 'function') {
-      toast(`Refund marked as ${status}.`);
-    }
-    render();
-  }
+        function daysUntilEvent(dateString) {
+            const eventDate = new Date(`${dateString}T12:00:00`);
+            if (Number.isNaN(eventDate.getTime())) {
+                return 999;
+            }
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            return Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
+        }
 
-  function getAudienceSegments(events) {
-    const hostedIds = getHostedEventIdSet(events);
-    const tickets = getTicketsSafe().filter((ticket) => hostedIds.has(String(ticket.eventId || '')));
-    const audienceMap = new Map();
+        function getEventHealthAlerts(events) {
+            const alerts = [];
 
-    tickets.forEach((ticket) => {
-      const email = String(ticket.email || '').trim().toLowerCase();
-      const phone = String(ticket.phone || '').trim();
-      const name = String(ticket.name || '').trim();
-      const key = email || phone || `name:${name.toLowerCase()}`;
-      if (!key) {
-        return;
-      }
+            events.forEach((event) => {
+                const metric = getMetricSafe(event.id);
+                const impressions = Number(metric.impressions || 0);
+                const sold = Number(metric.ticketSalesCount || 0);
+                const capacity = Number(event.capacity || 0);
+                const registered = Number(event.registered || 0);
+                const conversion = impressions > 0 ? (sold / impressions) * 100 : 0;
+                const fillRate = capacity > 0 ? (registered / capacity) * 100 : 0;
+                const daysLeft = daysUntilEvent(event.date);
 
-      const current = audienceMap.get(key) || {
-        identity: email || phone || name || 'Unknown attendee',
-        ticketCount: 0,
-        spend: 0,
-        events: new Set(),
-        hasContact: Boolean(email || phone)
-      };
+                if (impressions >= 120 && conversion < 1.2) {
+                    alerts.push({
+                        severity: 'high',
+                        message: `${event.name}: low conversion (${conversion.toFixed(1)}%). Consider pricing or copy updates.`
+                    });
+                }
 
-      current.ticketCount += 1;
-      current.spend += Number(ticket.amount || ticket.price || 0);
-      current.events.add(ticket.eventId || '');
-      audienceMap.set(key, current);
-    });
+                if (daysLeft <= 7 && daysLeft >= 0 && fillRate < 35) {
+                    alerts.push({
+                        severity: 'medium',
+                        message: `${event.name}: event is ${daysLeft}d away with only ${fillRate.toFixed(1)}% capacity filled.`
+                    });
+                }
 
-    const attendees = Array.from(audienceMap.values()).map((entry) => {
-      const eventCount = entry.events.size;
-      let segment = 'First-timer';
-      if (entry.ticketCount >= 3 || eventCount >= 2) {
-        segment = 'Repeat';
-      }
-      if (entry.spend >= 150000) {
-        segment = 'High Value';
-      }
-      if (!entry.hasContact) {
-        segment = 'No Contact';
-      }
-      return {
-        identity: entry.identity,
-        ticketCount: entry.ticketCount,
-        eventCount,
-        spend: entry.spend,
-        segment
-      };
-    });
+                if (fillRate >= 85 && daysLeft > 0) {
+                    alerts.push({
+                        severity: 'low',
+                        message: `${event.name}: strong demand (${fillRate.toFixed(1)}% filled). Consider opening more inventory.`
+                    });
+                }
+            });
 
-    const summary = {
-      total: attendees.length,
-      repeat: attendees.filter((item) => item.segment === 'Repeat').length,
-      highValue: attendees.filter((item) => item.segment === 'High Value').length,
-      firstTimers: attendees.filter((item) => item.segment === 'First-timer').length,
-      noContact: attendees.filter((item) => item.segment === 'No Contact').length
-    };
+            return alerts.slice(0, 6);
+        }
 
-    attendees.sort((a, b) => b.spend - a.spend);
-    return { summary, attendees: attendees.slice(0, 12) };
-  }
+        function getFinanceSnapshot(events) {
+            const totals = events.reduce((acc, event) => {
+                const metric = getMetricSafe(event.id);
+                const revenue = Number(metric.ticketRevenueTotal || 0);
+                const eventDaysLeft = daysUntilEvent(event.date);
+                acc.gross += revenue;
+                if (eventDaysLeft > 0) {
+                    acc.pending += revenue;
+                }
+                if (eventDaysLeft <= 0) {
+                    acc.completed += revenue;
+                }
+                return acc;
+            }, { gross: 0, pending: 0, completed: 0 });
 
-  function renderMetricCards(events) {
-    const totals = events.reduce((acc, event) => {
-      const metric = getMetricSafe(event.id);
-      acc.events += 1;
-      acc.registrations += Number(event.registered || 0);
-      acc.tickets += Number(metric.ticketSalesCount || 0);
-      acc.revenue += Number(metric.ticketRevenueTotal || 0);
-      acc.impressions += Number(metric.impressions || 0);
-      return acc;
-    }, { events: 0, registrations: 0, tickets: 0, revenue: 0, impressions: 0 });
+            const estimatedFees = totals.gross * 0.08;
+            const estimatedNet = totals.gross - estimatedFees;
+            return {
+                gross: totals.gross,
+                pending: totals.pending,
+                completed: totals.completed,
+                estimatedFees,
+                estimatedNet
+            };
+        }
 
-    return `
+        function toCsvCell(value) {
+            const text = String(value == null ? '' : value);
+            const escaped = text.replace(/"/g, '""');
+            return `"${escaped}"`;
+        }
+
+        function buildEventsCsv(events) {
+            const header = [
+                'Event Name',
+                'Date',
+                'City',
+                'Capacity',
+                'Registered',
+                'Tickets Sold',
+                'Impressions',
+                'Conversion %',
+                'Revenue'
+            ];
+
+            const rows = events.map((event) => {
+                const metric = getMetricSafe(event.id);
+                const impressions = Number(metric.impressions || 0);
+                const sold = Number(metric.ticketSalesCount || 0);
+                const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(2) : '0.00';
+                return [
+                    event.name || 'Untitled',
+                    event.date || '',
+                    event.city || '',
+                    Number(event.capacity || 0),
+                    Number(event.registered || 0),
+                    sold,
+                    impressions,
+                    conversion,
+                    Number(metric.ticketRevenueTotal || 0)
+                ];
+            });
+
+            const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(','));
+            return csvLines.join('\n');
+        }
+
+        function toDomId(value) {
+            return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '-');
+        }
+
+        function clampNumber(value, min, max) {
+            const num = Number(value);
+            if (!Number.isFinite(num)) {
+                return min;
+            }
+            return Math.max(min, Math.min(max, num));
+        }
+
+        function getTicketingConfig(event) {
+            const metadata = event && typeof event.metadata === 'object' && event.metadata ? event.metadata : {};
+            const ticketing = metadata.ticketing && typeof metadata.ticketing === 'object' ? metadata.ticketing : {};
+            const tiers = Array.isArray(ticketing.tiers) ? ticketing.tiers : [];
+
+            const findTierPrice = (name, fallback) => {
+                const found = tiers.find((tier) => String(tier.name || '').toLowerCase() === name.toLowerCase());
+                return Number(found && Number.isFinite(Number(found.price)) ? found.price : fallback);
+            };
+
+            const basePrice = Number(event.price || 0);
+            return {
+                reservePercent: clampNumber(ticketing.reservePercent == null ? 10 : ticketing.reservePercent, 0, 50),
+                earlyBirdPrice: findTierPrice('Early Bird', Math.max(basePrice * 0.75, 0)),
+                regularPrice: findTierPrice('Regular', basePrice),
+                vipPrice: findTierPrice('VIP', Math.max(basePrice * 1.5, 0))
+            };
+        }
+
+        function getEventByIdSafe(eventId) {
+            if (typeof getEventById === 'function') {
+                return getEventById(eventId);
+            }
+            const hosted = getHostedEventsSafe();
+            return hosted.find((event) => event.id === eventId) || null;
+        }
+
+        function saveTicketingConfig(eventId) {
+            const event = getEventByIdSafe(eventId);
+            if (!event || typeof saveEvent !== 'function') {
+                if (typeof toast === 'function') {
+                    toast('Could not update ticket settings for this event.');
+                }
+                return;
+            }
+
+            const domId = toDomId(eventId);
+            const reserveInput = document.getElementById(`tier-reserve-${domId}`);
+            const earlyInput = document.getElementById(`tier-early-${domId}`);
+            const regularInput = document.getElementById(`tier-regular-${domId}`);
+            const vipInput = document.getElementById(`tier-vip-${domId}`);
+
+            if (!reserveInput || !earlyInput || !regularInput || !vipInput) {
+                return;
+            }
+
+            const reservePercent = clampNumber(reserveInput.value, 0, 50);
+            const earlyBirdPrice = clampNumber(earlyInput.value, 0, 999999999);
+            const regularPrice = clampNumber(regularInput.value, 0, 999999999);
+            const vipPrice = clampNumber(vipInput.value, 0, 999999999);
+
+            const capacity = Math.max(0, Number(event.capacity || 0));
+            const reserveCount = Math.floor(capacity * (reservePercent / 100));
+
+            const nextMetadata = {
+                ...(event.metadata && typeof event.metadata === 'object' ? event.metadata : {}),
+                ticketing: {
+                    reservePercent,
+                    reserveCount,
+                    tiers: [
+                        { name: 'Early Bird', price: earlyBirdPrice, allocationPercent: 25 },
+                        { name: 'Regular', price: regularPrice, allocationPercent: 60 },
+                        { name: 'VIP', price: vipPrice, allocationPercent: 15 }
+                    ]
+                }
+            };
+
+            saveEvent({...event, metadata: nextMetadata });
+            if (typeof toast === 'function') {
+                toast('Ticket tiers and reserve saved.');
+            }
+            render();
+        }
+
+        function getHostedEventIdSet(events) {
+            return new Set((events || []).map((event) => String(event.id || '')));
+        }
+
+        function getRefundRequests(events) {
+            const hostedIds = getHostedEventIdSet(events);
+            const tickets = getTicketsSafe();
+
+            return tickets
+                .filter((ticket) => hostedIds.has(String(ticket.eventId || '')))
+                .filter((ticket) => {
+                    const status = String(ticket.refundStatus || '').toLowerCase();
+                    return Boolean(ticket.refundRequested) || ['pending', 'requested', 'approved', 'rejected'].includes(status);
+                })
+                .map((ticket) => {
+                    const status = String(ticket.refundStatus || (ticket.refundRequested ? 'pending' : '') || 'pending').toLowerCase();
+                    const event = events.find((item) => item.id === ticket.eventId);
+                    return {
+                        id: ticket.id,
+                        eventName: event ? event.name : 'Unknown Event',
+                        attendee: ticket.name || ticket.email || ticket.phone || 'Unknown attendee',
+                        amount: Number(ticket.amount || ticket.price || 0),
+                        reason: ticket.refundReason || 'No reason supplied',
+                        requestedAt: ticket.refundRequestedAt || ticket.createdAt || '',
+                        status
+                    };
+                })
+                .sort((a, b) => {
+                    const statusOrder = { pending: 0, requested: 0, approved: 1, rejected: 2 };
+                    const left = statusOrder[a.status] != null ? statusOrder[a.status] : 3;
+                    const right = statusOrder[b.status] != null ? statusOrder[b.status] : 3;
+                    if (left !== right) {
+                        return left - right;
+                    }
+                    return String(b.requestedAt || '').localeCompare(String(a.requestedAt || ''));
+                });
+        }
+
+        function updateRefundStatus(ticketId, status) {
+            if (typeof getTickets !== 'function' || typeof saveTicket !== 'function') {
+                return;
+            }
+
+            const tickets = getTickets();
+            const ticket = tickets.find((item) => item.id === ticketId);
+            if (!ticket) {
+                return;
+            }
+
+            const nextTicket = {
+                ...ticket,
+                refundRequested: true,
+                refundStatus: status,
+                refundResolvedAt: new Date().toISOString()
+            };
+
+            saveTicket(nextTicket);
+            if (typeof toast === 'function') {
+                toast(`Refund marked as ${status}.`);
+            }
+            render();
+        }
+
+        function getAudienceSegments(events) {
+            const hostedIds = getHostedEventIdSet(events);
+            const tickets = getTicketsSafe().filter((ticket) => hostedIds.has(String(ticket.eventId || '')));
+            const audienceMap = new Map();
+
+            tickets.forEach((ticket) => {
+                const email = String(ticket.email || '').trim().toLowerCase();
+                const phone = String(ticket.phone || '').trim();
+                const name = String(ticket.name || '').trim();
+                const key = email || phone || `name:${name.toLowerCase()}`;
+                if (!key) {
+                    return;
+                }
+
+                const current = audienceMap.get(key) || {
+                    identity: email || phone || name || 'Unknown attendee',
+                    ticketCount: 0,
+                    spend: 0,
+                    events: new Set(),
+                    hasContact: Boolean(email || phone)
+                };
+
+                current.ticketCount += 1;
+                current.spend += Number(ticket.amount || ticket.price || 0);
+                current.events.add(ticket.eventId || '');
+                audienceMap.set(key, current);
+            });
+
+            const attendees = Array.from(audienceMap.values()).map((entry) => {
+                const eventCount = entry.events.size;
+                let segment = 'First-timer';
+                if (entry.ticketCount >= 3 || eventCount >= 2) {
+                    segment = 'Repeat';
+                }
+                if (entry.spend >= 150000) {
+                    segment = 'High Value';
+                }
+                if (!entry.hasContact) {
+                    segment = 'No Contact';
+                }
+                return {
+                    identity: entry.identity,
+                    ticketCount: entry.ticketCount,
+                    eventCount,
+                    spend: entry.spend,
+                    segment
+                };
+            });
+
+            const summary = {
+                total: attendees.length,
+                repeat: attendees.filter((item) => item.segment === 'Repeat').length,
+                highValue: attendees.filter((item) => item.segment === 'High Value').length,
+                firstTimers: attendees.filter((item) => item.segment === 'First-timer').length,
+                noContact: attendees.filter((item) => item.segment === 'No Contact').length
+            };
+
+            attendees.sort((a, b) => b.spend - a.spend);
+            return { summary, attendees: attendees.slice(0, 12) };
+        }
+
+        function renderMetricCards(events) {
+            const totals = events.reduce((acc, event) => {
+                const metric = getMetricSafe(event.id);
+                acc.events += 1;
+                acc.registrations += Number(event.registered || 0);
+                acc.tickets += Number(metric.ticketSalesCount || 0);
+                acc.revenue += Number(metric.ticketRevenueTotal || 0);
+                acc.impressions += Number(metric.impressions || 0);
+                return acc;
+            }, { events: 0, registrations: 0, tickets: 0, revenue: 0, impressions: 0 });
+
+            return `
       <section class="host-overview-grid" aria-label="Host overview metrics">
         <article class="host-kpi-card"><p>Hosted Events</p><strong>${totals.events}</strong></article>
         <article class="host-kpi-card"><p>Total Registered</p><strong>${totals.registrations}</strong></article>
@@ -373,15 +373,15 @@
         <article class="host-kpi-card"><p>Impressions</p><strong>${totals.impressions}</strong></article>
       </section>
     `;
-  }
+        }
 
-  function renderOverview(events) {
-    const finance = getFinanceSnapshot(events);
-    const alerts = getEventHealthAlerts(events);
-    const rows = events.slice(0, 6).map((event) => {
-      const status = typeof getEventStatusBadge === 'function' ? getEventStatusBadge(event) : { label: 'Upcoming', className: 'is-upcoming' };
-      const metric = getMetricSafe(event.id);
-      return `
+        function renderOverview(events) {
+            const finance = getFinanceSnapshot(events);
+            const alerts = getEventHealthAlerts(events);
+            const rows = events.slice(0, 6).map((event) => {
+                const status = typeof getEventStatusBadge === 'function' ? getEventStatusBadge(event) : { label: 'Upcoming', className: 'is-upcoming' };
+                const metric = getMetricSafe(event.id);
+                return `
         <tr>
           <td>${escapeHtml(event.name || 'Untitled')}</td>
           <td>${escapeHtml(typeof formatDate === 'function' ? formatDate(event.date) : event.date || '')}</td>
@@ -391,9 +391,9 @@
           <td>${typeof formatPrice === 'function' ? formatPrice(metric.ticketRevenueTotal || 0, event.currency || 'UGX') : Number(metric.ticketRevenueTotal || 0)}</td>
         </tr>
       `;
-    }).join('');
+            }).join('');
 
-    return `
+            return `
       ${renderMetricCards(events)}
       <section class="host-toolbar card" aria-label="Dashboard quick actions">
         <div class="host-toolbar-actions">

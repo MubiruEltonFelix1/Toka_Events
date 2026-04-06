@@ -101,68 +101,68 @@ function getAvatarColor(name) {
 }
 
 function normalizeCountryCode(rawValue) {
-  const digits = String(rawValue || '').replace(/[^0-9]/g, '');
-  if (!digits || digits.length < 1 || digits.length > 4) {
-    return '';
-  }
-  return `+${digits}`;
+    const digits = String(rawValue || '').replace(/[^0-9]/g, '');
+    if (!digits || digits.length < 1 || digits.length > 4) {
+        return '';
+    }
+    return `+${digits}`;
 }
 
 function normalizeLocalPhoneNumber(rawValue) {
-  const digits = String(rawValue || '').replace(/[^0-9]/g, '');
-  if (!digits || digits.length < 6 || digits.length > 12) {
-    return '';
-  }
-  return digits;
+    const digits = String(rawValue || '').replace(/[^0-9]/g, '');
+    if (!digits || digits.length < 6 || digits.length > 12) {
+        return '';
+    }
+    return digits;
 }
 
 function buildE164Phone(countryCode, localDigits) {
-  const normalizedCountryCode = normalizeCountryCode(countryCode);
-  const normalizedLocal = normalizeLocalPhoneNumber(localDigits);
-  if (!normalizedCountryCode || !normalizedLocal) {
-    return { ok: false, error: 'Enter a valid country code and phone number.' };
-  }
-  const combinedDigits = `${normalizedCountryCode.slice(1)}${normalizedLocal}`;
-  if (combinedDigits.length < 8 || combinedDigits.length > 15) {
-    return { ok: false, error: 'Phone number must be between 8 and 15 digits including country code.' };
-  }
-  return {
-    ok: true,
-    e164: `+${combinedDigits}`,
-    countryCode: normalizedCountryCode,
-    localNumber: normalizedLocal
-  };
+    const normalizedCountryCode = normalizeCountryCode(countryCode);
+    const normalizedLocal = normalizeLocalPhoneNumber(localDigits);
+    if (!normalizedCountryCode || !normalizedLocal) {
+        return { ok: false, error: 'Enter a valid country code and phone number.' };
+    }
+    const combinedDigits = `${normalizedCountryCode.slice(1)}${normalizedLocal}`;
+    if (combinedDigits.length < 8 || combinedDigits.length > 15) {
+        return { ok: false, error: 'Phone number must be between 8 and 15 digits including country code.' };
+    }
+    return {
+        ok: true,
+        e164: `+${combinedDigits}`,
+        countryCode: normalizedCountryCode,
+        localNumber: normalizedLocal
+    };
 }
 
 function parseE164Phone(phoneValue, fallbackCountryCode = '+256') {
-  const value = String(phoneValue || '').trim();
-  if (!value.startsWith('+')) {
-    const fallback = buildE164Phone(fallbackCountryCode, value);
-    return fallback.ok ? fallback : { ok: false, error: 'Phone number must include country code.' };
-  }
-
-  const digits = value.replace(/[^0-9]/g, '');
-  for (let ccLength = 1; ccLength <= 4; ccLength += 1) {
-    const country = digits.slice(0, ccLength);
-    const local = digits.slice(ccLength);
-    const parsed = buildE164Phone(`+${country}`, local);
-    if (parsed.ok) {
-      return parsed;
+    const value = String(phoneValue || '').trim();
+    if (!value.startsWith('+')) {
+        const fallback = buildE164Phone(fallbackCountryCode, value);
+        return fallback.ok ? fallback : { ok: false, error: 'Phone number must include country code.' };
     }
-  }
 
-  return { ok: false, error: 'Invalid international phone format.' };
+    const digits = value.replace(/[^0-9]/g, '');
+    for (let ccLength = 1; ccLength <= 4; ccLength += 1) {
+        const country = digits.slice(0, ccLength);
+        const local = digits.slice(ccLength);
+        const parsed = buildE164Phone(`+${country}`, local);
+        if (parsed.ok) {
+            return parsed;
+        }
+    }
+
+    return { ok: false, error: 'Invalid international phone format.' };
 }
 
 function validateAndNormalizePhoneInput(rawValue, fallbackCountryCode = '+256') {
-  const input = String(rawValue || '').trim();
-  if (!input) {
-    return { ok: false, error: 'Phone number is required.' };
-  }
-  if (input.startsWith('+')) {
-    return parseE164Phone(input, fallbackCountryCode);
-  }
-  return buildE164Phone(fallbackCountryCode, input);
+    const input = String(rawValue || '').trim();
+    if (!input) {
+        return { ok: false, error: 'Phone number is required.' };
+    }
+    if (input.startsWith('+')) {
+        return parseE164Phone(input, fallbackCountryCode);
+    }
+    return buildE164Phone(fallbackCountryCode, input);
 }
 
 function isAuthenticatedUser() {
@@ -379,23 +379,23 @@ function openAuthModal(mode = 'signin', message = '') {
         resendButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
     }
     signupOnlyFields.forEach((field) => {
-      field.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
+        field.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
     });
 
     if (TOKA_AUTH_STATE.authMode === 'signup') {
-      const parsedPhone = parseE164Phone(profile.phone || '', profile.phoneCountryCode || '+256');
-      if (signupName && !signupName.value) {
-        signupName.value = profile.name || '';
-      }
-      if (signupGender && !signupGender.value) {
-        signupGender.value = profile.gender || '';
-      }
-      if (signupCountryCode && !signupCountryCode.value) {
-        signupCountryCode.value = parsedPhone.ok ? parsedPhone.countryCode : (profile.phoneCountryCode || '+256');
-      }
-      if (signupPhoneLocal && !signupPhoneLocal.value) {
-        signupPhoneLocal.value = parsedPhone.ok ? parsedPhone.localNumber : (profile.phoneNationalNumber || '');
-      }
+        const parsedPhone = parseE164Phone(profile.phone || '', profile.phoneCountryCode || '+256');
+        if (signupName && !signupName.value) {
+            signupName.value = profile.name || '';
+        }
+        if (signupGender && !signupGender.value) {
+            signupGender.value = profile.gender || '';
+        }
+        if (signupCountryCode && !signupCountryCode.value) {
+            signupCountryCode.value = parsedPhone.ok ? parsedPhone.countryCode : (profile.phoneCountryCode || '+256');
+        }
+        if (signupPhoneLocal && !signupPhoneLocal.value) {
+            signupPhoneLocal.value = parsedPhone.ok ? parsedPhone.localNumber : (profile.phoneNationalNumber || '');
+        }
     }
 
     if (modal) {
@@ -455,28 +455,28 @@ async function handleAuthSubmit(event) {
 
     try {
         if (TOKA_AUTH_STATE.authMode === 'signup') {
-          if (!fullName || !gender) {
-            setAuthFeedback('Full name and gender are required for sign up.');
-            return;
-          }
+            if (!fullName || !gender) {
+                setAuthFeedback('Full name and gender are required for sign up.');
+                return;
+            }
 
-          const parsedPhone = buildE164Phone(countryCode, phoneLocal);
-          if (!parsedPhone.ok) {
-            setAuthFeedback(parsedPhone.error);
-            return;
-          }
+            const parsedPhone = buildE164Phone(countryCode, phoneLocal);
+            if (!parsedPhone.ok) {
+                setAuthFeedback(parsedPhone.error);
+                return;
+            }
 
             const { data, error } = await client.auth.signUp({
                 email,
                 password,
                 options: {
-              data: {
-                full_name: fullName,
-                gender,
-                phone: parsedPhone.e164,
-                phone_country_code: parsedPhone.countryCode,
-                phone_national_number: parsedPhone.localNumber
-              },
+                    data: {
+                        full_name: fullName,
+                        gender,
+                        phone: parsedPhone.e164,
+                        phone_country_code: parsedPhone.countryCode,
+                        phone_national_number: parsedPhone.localNumber
+                    },
                     emailRedirectTo: getAuthRedirectUrl()
                 }
             });
@@ -491,14 +491,14 @@ async function handleAuthSubmit(event) {
             }
 
             setAuthFeedback('Check your email to confirm your account.', 'success');
-      saveUserProfile({
-        name: fullName,
-        gender,
-        phone: parsedPhone.e164,
-        phoneCountryCode: parsedPhone.countryCode,
-        phoneNationalNumber: parsedPhone.localNumber,
-        email
-      });
+            saveUserProfile({
+                name: fullName,
+                gender,
+                phone: parsedPhone.e164,
+                phoneCountryCode: parsedPhone.countryCode,
+                phoneNationalNumber: parsedPhone.localNumber,
+                email
+            });
             if (passwordInput) {
                 passwordInput.value = '';
             }
