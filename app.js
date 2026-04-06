@@ -718,7 +718,6 @@ function openAuthModal(mode = 'signin', message = '') {
     const submitButton = qs('#auth-submit');
     const toggleButton = qs('#auth-toggle-mode');
     const forgotButton = qs('#auth-forgot-password');
-    const magicLinkButton = qs('#auth-magic-link');
     const resendButton = qs('#auth-resend-confirmation');
     const signupOnlyFields = qsa('.auth-signup-only');
     const signupName = qs('#auth-full-name');
@@ -748,9 +747,6 @@ function openAuthModal(mode = 'signin', message = '') {
     }
     if (forgotButton) {
         forgotButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode === 'signup');
-    }
-    if (magicLinkButton) {
-      magicLinkButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode === 'signup');
     }
     if (resendButton) {
         resendButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
@@ -788,6 +784,11 @@ function openAuthModal(mode = 'signin', message = '') {
 
     setAuthFeedback(message, message ? 'info' : '');
 }
+
+  function toggleAuthMode() {
+    const nextMode = TOKA_AUTH_STATE.authMode === 'signup' ? 'signin' : 'signup';
+    openAuthModal(nextMode);
+  }
 
 function closeAuthModal() {
     const modal = qs('#auth-modal');
@@ -933,38 +934,6 @@ async function handleAuthSubmit(event) {
       return 'Too many sign-in attempts. Wait a moment and try again.';
     }
     return rawMessage;
-  }
-
-  async function handleMagicLinkSignIn() {
-    const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-    const emailInput = qs('#auth-email');
-    const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
-
-    if (!client || !client.auth) {
-      setAuthFeedback('Supabase auth is not configured in this browser session.');
-      return;
-    }
-    if (!email) {
-      setAuthFeedback('Enter your email first.');
-      return;
-    }
-
-    try {
-      const { error } = await client.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: getAuthRedirectUrl(),
-          shouldCreateUser: false
-        }
-      });
-      if (error) {
-        throw error;
-      }
-      setAuthFeedback('Magic link sent. Check your inbox and spam folder.', 'success');
-    } catch (error) {
-      const message = error && error.message ? String(error.message) : 'Could not send magic link.';
-      setAuthFeedback(message);
-    }
   }
 
 async function handleForgotPassword() {
@@ -4210,11 +4179,6 @@ function bindGlobalEvents() {
   const authForgot = qs('#auth-forgot-password');
   if (authForgot) {
     authForgot.addEventListener('click', handleForgotPassword);
-  }
-
-  const authMagicLink = qs('#auth-magic-link');
-  if (authMagicLink) {
-    authMagicLink.addEventListener('click', handleMagicLinkSignIn);
   }
 
   const authResend = qs('#auth-resend-confirmation');
