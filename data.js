@@ -221,6 +221,7 @@ async function supabaseSelectSharedEvents(sinceTimestamp = '') {
     let query = client
         .from(TOKA_SUPABASE_TABLES.events)
         .select('*')
+        .eq('owner_user_id', ownerUserId)
         .order('updated_at', { ascending: true });
 
     if (sinceTimestamp) {
@@ -671,7 +672,8 @@ function startSupabaseRealtimeEventsSync() {
         .on('postgres_changes', {
             event: '*',
             schema: 'public',
-            table: TOKA_SUPABASE_TABLES.events
+            table: TOKA_SUPABASE_TABLES.events,
+            filter: `owner_user_id=eq.${ownerUserId}`
         }, () => {
             syncSharedEventsFromCloud().catch((error) => {
                 reportSupabaseError('realtime.sharedEvents', error);

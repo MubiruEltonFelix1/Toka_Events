@@ -288,7 +288,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-        await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-8`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-9`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
