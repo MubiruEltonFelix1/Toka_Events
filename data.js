@@ -1087,7 +1087,7 @@ function deleteSavedEvent(eventId) {
     const nextCalendarEntries = getCalendarEntries().filter((entry) => entry && entry.eventId !== eventId);
     writeStorage(TOKA_STORAGE_KEYS.calendarEntries, nextCalendarEntries);
 
-    const nextMetrics = { ...getEventMetrics() };
+    const nextMetrics = {...getEventMetrics() };
     delete nextMetrics[eventId];
     writeStorage(TOKA_STORAGE_KEYS.eventMetrics, nextMetrics);
 
