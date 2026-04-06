@@ -493,10 +493,7 @@ async function pullSupabaseIntoLocalStorage() {
         }
     }
 
-    const remoteEvents = pickLatestRowsByKey(eventRows, 'id').map((row) => row.payload).filter(Boolean);
-    if (remoteEvents.length) {
-        writeStorage(TOKA_STORAGE_KEYS.events, mergeById(getSavedEvents(), remoteEvents));
-    }
+    mergeRemoteEventRowsIntoLocal(eventRows, { fullRefresh: true });
 
     const remoteTickets = pickLatestRowsByKey(ticketRows, 'id').map((row) => row.payload).filter(Boolean);
     if (remoteTickets.length) {
@@ -588,15 +585,25 @@ function updateEventsSyncCursorFromRows(rows) {
     }
 }
 
-function mergeRemoteEventRowsIntoLocal(eventRows) {
+function mergeRemoteEventRowsIntoLocal(eventRows, options = {}) {
     updateEventsSyncCursorFromRows(eventRows);
     const remoteEvents = pickLatestRowsByKey(eventRows, 'id').map((row) => row.payload).filter(Boolean);
-    if (!remoteEvents.length) {
-        return false;
-    }
-
     const previous = getSavedEvents();
-    const merged = mergeById(previous, remoteEvents);
+    const shouldPruneMissing = Boolean(options && options.fullRefresh);
+    const pendingIds = new Set(getPendingEventSyncIds());
+    const remoteIds = new Set(remoteEvents.map((event) => String(event && event.id || '')));
+
+    const localBase = shouldPruneMissing ?
+        previous.filter((event) => {
+            const id = String(event && event.id || '');
+            if (!id) {
+                return false;
+            }
+            return pendingIds.has(id) || remoteIds.has(id);
+        }) :
+        previous;
+
+    const merged = mergeById(localBase, remoteEvents);
     if (JSON.stringify(previous) === JSON.stringify(merged)) {
         return false;
     }
@@ -632,7 +639,7 @@ async function syncSharedEventsFromCloud(options = {}) {
     const cursor = shouldForceFullRefresh ? '' : getEventsSyncCursor();
     const eventRows = await supabaseSelectSharedEvents(cursor);
 
-    const hasChanges = mergeRemoteEventRowsIntoLocal(eventRows);
+    const hasChanges = mergeRemoteEventRowsIntoLocal(eventRows, { fullRefresh: shouldForceFullRefresh });
     if (hasChanges) {
         notifyCloudEventsUpdated();
     }
