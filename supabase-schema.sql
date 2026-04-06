@@ -772,6 +772,12 @@ begin
             using (auth.uid() is not null);
     end if;
 
+    if not exists (select 1 from pg_policies where policyname = 'toka_events_public_read') then
+        create policy toka_events_public_read on public.toka_events
+            for select
+            using (true);
+    end if;
+
     if not exists (select 1 from pg_policies where policyname = 'toka_tickets_owner_rw') then
         create policy toka_tickets_owner_rw on public.toka_tickets
             for all

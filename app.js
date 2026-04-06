@@ -292,7 +292,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-18`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-20`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -336,7 +336,7 @@ async function registerServiceWorker() {
     }
 
     if (typeof window.clearCachedCloudData === 'function') {
-      window.clearCachedCloudData();
+      window.clearCachedCloudData({ preservePublicEvents: false });
     }
 
     removeScopedStorageEntries(localStorage);
@@ -675,6 +675,8 @@ async function applyAuthSession(session) {
 
     if (TOKA_AUTH_STATE.isAuthenticated && typeof window.initializeSupabaseSync === 'function') {
         await window.initializeSupabaseSync();
+    } else if (typeof window.startSupabaseAutoSync === 'function') {
+      window.startSupabaseAutoSync();
     }
 
     if (!TOKA_AUTH_STATE.isAuthenticated && TOKA_PROTECTED_SCREENS.has(TOKA_APP_STATE.currentScreen)) {
@@ -2172,7 +2174,7 @@ async function logoutUser() {
     window.stopSupabaseAutoSync();
   }
   if (typeof window.clearCachedCloudData === 'function') {
-    window.clearCachedCloudData();
+    window.clearCachedCloudData({ preservePublicEvents: true });
   }
 
   TOKA_AUTH_STATE.session = null;
@@ -2573,10 +2575,10 @@ function openHostDashboard() {
 function getHostedEvents() {
   const allEvents = getEvents();
   const ownerUserId = String((TOKA_AUTH_STATE && TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id) || '').trim();
-  if (ownerUserId) {
-    return allEvents.filter((event) => String(event && event.ownerUserId || '') === ownerUserId);
+  if (!ownerUserId) {
+    return [];
   }
-  return allEvents.filter((event) => userIsOrganiser(event));
+  return allEvents.filter((event) => String((event && event.ownerUserId) || '') === ownerUserId);
 }
 
 function getRevenueSeries(eventId, points = 7) {
@@ -3214,6 +3216,12 @@ async function initApp() {
 
   if (TOKA_AUTH_STATE.isAuthenticated && typeof window.initializeSupabaseSync === 'function') {
     await window.initializeSupabaseSync();
+  }
+
+  if (typeof window.syncPublicEventsFromCloud === 'function') {
+    await window.syncPublicEventsFromCloud({ fullRefresh: true }).catch((error) => {
+      console.warn('Public event sync failed', error);
+    });
   }
 
   seedMockComments();
