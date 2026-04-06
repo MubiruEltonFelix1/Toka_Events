@@ -56,7 +56,7 @@
     <link rel="icon" href="favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest?v=20260405-1" />
-    <link rel="stylesheet" href="style.css?v=20260406-4" />
+    <link rel="stylesheet" href="style.css?v=20260406-10" />
 
     <!-- JSON-LD Structured Data for SEO -->
     <script type="application/ld+json">
@@ -150,7 +150,9 @@
                     <span class="brand-title">Toka Events and Ticketing</span>
                 </span>
             </button>
-            <div class="auth-header-actions" id="auth-header-actions"></div>
+            <div class="auth-header-actions" id="auth-header-actions">
+                <button type="button" class="button button-primary button-small auth-sign-in" onclick="openAuthModal('signin')">Sign In</button>
+            </div>
         </header>
         <div id="app-toast" class="toast" aria-live="polite"></div>
 
@@ -179,10 +181,18 @@
                             <button type="button" class="button button-secondary" onclick="showScreen('screen-host')">Host an Event</button>
                         </div>
                     </div>
-                    <div class="card">
-                        <p class="eyebrow">What is moving right now</p>
-                        <h3>Bold nights. Clean checkouts. Real community energy.</h3>
-                        <p class="text-muted">Toka makes it simple to find what is happening nearby and make your own event go live fast.</p>
+                    <div class="card hero-live-card">
+                        <div class="hero-live-eyebrow-row">
+                            <span class="hero-live-dot" aria-hidden="true"></span>
+                            <p class="eyebrow">YOUR CITY IS ALIVE TONIGHT</p>
+                        </div>
+                        <h3>The moments everyone will be talking about tomorrow - find them now.</h3>
+                        <p class="text-muted">From underground sets to campus takeovers, Toka puts every happening in your pocket. Discover, RSVP, and show up - before the crowd does.</p>
+                        <div class="hero-live-stats" aria-label="Live platform stats">
+                            <span class="hero-stat-pill">120+ events this week</span>
+                            <span class="hero-stat-pill">4 cities</span>
+                            <span class="hero-stat-pill">Free to join</span>
+                        </div>
                     </div>
                 </div>
 
@@ -734,26 +744,67 @@
 
         <nav class="bottom-nav" id="bottom-nav">
             <button type="button" onclick="showScreen('screen-home')" class="nav-item active" data-screen="screen-home">
-        <span class="nav-icon">🏠</span>
+        <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 10.5 12 3l9 7.5"></path>
+                <path d="M5.5 9.5V21h13V9.5"></path>
+            </svg>
+        </span>
         <span class="nav-label">Home</span>
       </button>
             <button type="button" onclick="showScreen('screen-discover')" class="nav-item" data-screen="screen-discover">
-        <span class="nav-icon">🔍</span>
+        <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="6.5"></circle>
+                <path d="m16 16 5 5"></path>
+            </svg>
+        </span>
         <span class="nav-label">Discover</span>
       </button>
             <button type="button" onclick="showScreen('screen-calendar')" class="nav-item" data-screen="screen-calendar">
-                <span class="nav-icon">🗓️</span>
+                <span class="nav-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="5" width="18" height="16" rx="3"></rect>
+                        <path d="M8 3v4M16 3v4M3 10h18"></path>
+                    </svg>
+                </span>
                 <span class="nav-label">Calendar</span>
             </button>
             <button type="button" onclick="showScreen('screen-my-tickets')" class="nav-item" data-screen="screen-my-tickets">
-        <span class="nav-icon">🎫</span>
+        <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 8a2 2 0 0 0 0 4 2 2 0 0 1 0 4v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1a2 2 0 0 1 0-4 2 2 0 0 0 0-4V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2Z"></path>
+                <path d="M12 7v10"></path>
+            </svg>
+            <span class="nav-notification-dot hidden" id="tickets-nav-dot" aria-hidden="true"></span>
+        </span>
         <span class="nav-label">Tickets</span>
       </button>
             <button type="button" onclick="showScreen('screen-profile')" class="nav-item" data-screen="screen-profile">
-        <span class="nav-icon">👤</span>
+        <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="4"></circle>
+                <path d="M4 20c1.5-3.8 4.5-5.7 8-5.7s6.5 1.9 8 5.7"></path>
+            </svg>
+        </span>
         <span class="nav-label">Profile</span>
       </button>
         </nav>
+
+        <div id="event-drawer-modal" class="event-drawer-modal hidden" aria-hidden="true">
+            <div class="event-drawer-backdrop" onclick="closeEventDrawer()"></div>
+            <section class="event-drawer" id="event-drawer" role="dialog" aria-modal="true" aria-labelledby="event-drawer-title">
+                <div class="event-drawer-handle" aria-hidden="true"></div>
+                <div id="event-drawer-content"></div>
+            </section>
+        </div>
+
+        <div id="share-sheet-modal" class="share-sheet-modal hidden" aria-hidden="true">
+            <div class="share-sheet-backdrop" onclick="closeShareSheet()"></div>
+            <section class="share-sheet" role="dialog" aria-modal="true" aria-labelledby="share-sheet-title">
+                <div id="share-sheet-content"></div>
+            </section>
+        </div>
 
         <div id="calendar-event-modal" class="calendar-modal hidden" aria-hidden="true">
             <div class="calendar-modal-backdrop" onclick="closeCalendarEventModal()"></div>
@@ -806,6 +857,7 @@
                 <div class="auth-actions">
                     <button type="button" class="button button-ghost button-small" id="auth-toggle-mode">Need an account? Sign Up</button>
                     <button type="button" class="button button-ghost button-small" id="auth-forgot-password">Forgot Password?</button>
+                    <button type="button" class="button button-ghost button-small" id="auth-magic-link">Email me a magic link</button>
                     <button type="button" class="button button-ghost button-small hidden" id="auth-resend-confirmation">Resend confirmation email</button>
                 </div>
             </div>
@@ -816,8 +868,30 @@
     <script src="vendor/qrcode.min.js?v=20260405-1"></script>
     <script src="supabase-config.js?v=20260405-3"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="data.js?v=20260406-17"></script>
-    <script src="app.js?v=20260406-14"></script>
+    <script>
+        window.TOKA_QRCodePromise = import('https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm').then((module) => module.default || module);
+    </script>
+    <script>
+        (async function purgeLegacyTokaServiceWorkers() {
+            try {
+                if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map((reg) => reg.unregister()));
+                }
+                if (typeof caches !== 'undefined' && caches && typeof caches.keys === 'function') {
+                    const keys = await caches.keys();
+                    const tokaKeys = keys.filter((key) => key && key.toLowerCase().indexOf('toka') >= 0);
+                    await Promise.all(tokaKeys.map((key) => caches.delete(key)));
+                }
+            } catch (error) {
+                console.warn('Legacy SW cleanup skipped', error);
+            }
+        })();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
+    <script src="data.js?v=20260406-19"></script>
+    <script src="app.js?v=20260406-27"></script>
     <script src="host-dashboard-controller.js?v=20260406-8"></script>
 </body>
 

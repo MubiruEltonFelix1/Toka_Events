@@ -135,6 +135,27 @@ create table if not exists public.toka_event_metrics (
     primary key (device_id, event_id)
 );
 
+create table if not exists public.ticket_types (
+    id text primary key,
+    event_id text not null,
+    name text not null,
+    description text,
+    price numeric(14, 2) not null default 0,
+    currency text not null default 'UGX',
+    quantity_total integer,
+    quantity_remaining integer,
+    is_visible boolean not null default true,
+    created_at timestamptz not null default now()
+);
+
+create table if not exists public.event_attendees (
+    id uuid primary key default gen_random_uuid(),
+    event_id text not null,
+    user_id uuid not null,
+    ticket_type_id text,
+    registered_at timestamptz not null default now()
+);
+
 -- Idempotent alter statements in case tables existed before typed columns were added.
 alter table public.toka_profiles add column if not exists name text;
 alter table public.toka_profiles add column if not exists gender text;
@@ -207,6 +228,21 @@ alter table public.toka_event_metrics add column if not exists ticket_revenue_to
 alter table public.toka_event_metrics add column if not exists calendar_adds_with_ticket integer;
 alter table public.toka_event_metrics add column if not exists calendar_adds_without_ticket integer;
 alter table public.toka_event_metrics add column if not exists owner_user_id uuid;
+
+alter table public.ticket_types add column if not exists event_id text;
+alter table public.ticket_types add column if not exists name text;
+alter table public.ticket_types add column if not exists description text;
+alter table public.ticket_types add column if not exists price numeric(14, 2);
+alter table public.ticket_types add column if not exists currency text;
+alter table public.ticket_types add column if not exists quantity_total integer;
+alter table public.ticket_types add column if not exists quantity_remaining integer;
+alter table public.ticket_types add column if not exists is_visible boolean;
+alter table public.ticket_types add column if not exists created_at timestamptz;
+
+alter table public.event_attendees add column if not exists event_id text;
+alter table public.event_attendees add column if not exists user_id uuid;
+alter table public.event_attendees add column if not exists ticket_type_id text;
+alter table public.event_attendees add column if not exists registered_at timestamptz;
 
 -- Helper parser for flexible timestamp inputs.
 create or replace function public.toka_try_timestamptz(input_text text)
@@ -766,6 +802,9 @@ create index if not exists idx_toka_comments_owner on public.toka_comments (owne
 create index if not exists idx_toka_updates_owner on public.toka_updates (owner_user_id);
 create index if not exists idx_toka_calendar_owner on public.toka_calendar_entries (owner_user_id);
 create index if not exists idx_toka_metrics_owner on public.toka_event_metrics (owner_user_id);
+create index if not exists idx_ticket_types_event_id on public.ticket_types (event_id, price);
+create index if not exists idx_event_attendees_event_id on public.event_attendees (event_id);
+create index if not exists idx_event_attendees_user_id on public.event_attendees (user_id);
 
 alter table public.toka_profiles enable row level security;
 alter table public.toka_events enable row level security;
@@ -774,6 +813,8 @@ alter table public.toka_comments enable row level security;
 alter table public.toka_updates enable row level security;
 alter table public.toka_calendar_entries enable row level security;
 alter table public.toka_event_metrics enable row level security;
+alter table public.ticket_types enable row level security;
+alter table public.event_attendees enable row level security;
 
 -- Production policy: owner-only writes, with shared authenticated reads for events.
 do $$
@@ -785,6 +826,11 @@ begin
     drop policy if exists toka_updates_anon_rw on public.toka_updates;
     drop policy if exists toka_calendar_entries_anon_rw on public.toka_calendar_entries;
     drop policy if exists toka_event_metrics_anon_rw on public.toka_event_metrics;
+    drop policy if exists ticket_types_public_read on public.ticket_types;
+    drop policy if exists ticket_types_owner_rw on public.ticket_types;
+    drop policy if exists event_attendees_public_read on public.event_attendees;
+    drop policy if exists event_attendees_owner_rw on public.event_attendees;
+    drop policy if exists event_attendees_host_read on public.event_attendees;
 
     if not exists (select 1 from pg_policies where policyname = 'toka_profiles_owner_rw') then
         create policy toka_profiles_owner_rw on public.toka_profiles
@@ -859,6 +905,62 @@ begin
             for all
             using (auth.uid() is not null and owner_user_id = auth.uid())
             with check (auth.uid() is not null and owner_user_id = auth.uid());
+    end if;
+
+    if not exists (select 1 from pg_policies where policyname = 'ticket_types_public_read') then
+        create policy ticket_types_public_read on public.ticket_types
+            for select
+            using (true);
+    end if;
+
+    if not exists (select 1 from pg_policies where policyname = 'ticket_types_owner_rw') then
+        create policy ticket_types_owner_rw on public.ticket_types
+            for all
+            using (
+                auth.uid() is not null
+                and exists (
+                    select 1
+                    from public.toka_events e
+                    where e.id = ticket_types.event_id
+                      and e.owner_user_id = auth.uid()
+                )
+            )
+            with check (
+                auth.uid() is not null
+                and exists (
+                    select 1
+                    from public.toka_events e
+                    where e.id = ticket_types.event_id
+                      and e.owner_user_id = auth.uid()
+                )
+            );
+    end if;
+
+    if not exists (select 1 from pg_policies where policyname = 'event_attendees_public_read') then
+        create policy event_attendees_public_read on public.event_attendees
+            for select
+            using (true);
+    end if;
+
+    if not exists (select 1 from pg_policies where policyname = 'event_attendees_owner_rw') then
+        create policy event_attendees_owner_rw on public.event_attendees
+            for all
+            using (auth.uid() is not null and user_id = auth.uid())
+            with check (auth.uid() is not null and user_id = auth.uid());
+    end if;
+
+    if not exists (select 1 from pg_policies where policyname = 'event_attendees_host_read') then
+        create policy event_attendees_host_read on public.event_attendees
+            for select
+            using (
+                auth.uid() is not null
+                and exists (
+                    select 1
+                    from public.toka_events e
+                    where e.id = event_attendees.event_id
+                      and e.owner_user_id = auth.uid()
+                )
+            );
     end if;
 end
 $$;

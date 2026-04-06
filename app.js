@@ -22,7 +22,20 @@ const TOKA_APP_STATE = {
     lastPublishedFingerprint: '',
     lastPublishedAt: 0,
     postOnboardingScreen: '',
-    hostDashboardRoute: 'dashboard'
+    hostDashboardRoute: 'dashboard',
+    isFetchingEvents: false,
+    eventDrawerOpen: false,
+    eventDrawerLoading: false,
+    eventDrawerRequestId: 0,
+    eventDrawerTouchStartY: 0,
+    eventDrawerTouchCurrentY: 0,
+    eventDrawerDragEnabled: false,
+    eventDrawerExpandedDescription: false,
+    eventDrawerSelectedTier: '',
+    selectedTicketTierId: '',
+    eventDrawerShareOpen: false,
+    publicFeedHydrationInFlight: false,
+    lastPublicFeedHydrationAt: 0
 };
 
 const TOKA_PWA_STATE = {
@@ -64,6 +77,21 @@ const TOKA_PROTECTED_SCREENS = new Set([
 window.TOKA_AUTH_STATE = TOKA_AUTH_STATE;
 
 const TOKA_AVATAR_COLORS = ['#F4500A', '#F7B731', '#C6F135', '#2E2E2E', '#7B3F00', '#D16B34', '#AA4C1D', '#5C3B1E'];
+const TOKA_CATEGORY_COLORS = {
+  Tech: '#E85D1F',
+  Music: '#4CAF50',
+  Sports: '#6FCF97',
+  Business: '#F7B731',
+  Art: '#F2994A',
+  Faith: '#9B51E0',
+  'Food & Drinks': '#D16B34',
+  Campus: '#2D9CDB',
+  Community: '#27AE60'
+};
+
+if (window.dayjs && window.dayjs_plugin_customParseFormat) {
+  window.dayjs.extend(window.dayjs_plugin_customParseFormat);
+}
 
 function qs(selector, root = document) {
     return root.querySelector(selector);
@@ -80,6 +108,283 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function getInlineIcon(iconName, size = 16, stroke = '#888888', className = '') {
+  const cls = className ? ` class="${className}"` : '';
+  if (iconName === 'calendar') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M8 3v4M16 3v4M3 10h18"></path></svg>`;
+  }
+  if (iconName === 'clock') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>`;
+  }
+  if (iconName === 'pin') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s6-5.3 6-11a6 6 0 1 0-12 0c0 5.7 6 11 6 11Z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>`;
+  }
+  if (iconName === 'tag') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13 11 4H4v7l9 9 7-7Z"></path><circle cx="7.5" cy="7.5" r="1"></circle></svg>`;
+  }
+  if (iconName === 'ticket') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 0 0 4 2 2 0 0 1 0 4v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1a2 2 0 0 1 0-4 2 2 0 0 0 0-4V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2Z"></path><path d="M12 7v10"></path></svg>`;
+  }
+  if (iconName === 'people') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"></circle><circle cx="16.5" cy="10" r="2.5"></circle><path d="M3.8 18a5.2 5.2 0 0 1 10.4 0"></path><path d="M14 18a4 4 0 0 1 6.5-3.1"></path></svg>`;
+  }
+  if (iconName === 'share') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.3 10.8 7.2-4.1M8.3 13.2l7.2 4.1"></path></svg>`;
+  }
+  if (iconName === 'link') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 1 0-7l1.2-1.2a5 5 0 0 1 7.1 7.1L17 13"></path><path d="M14 11a5 5 0 0 1 0 7l-1.2 1.2a5 5 0 0 1-7.1-7.1L7 11"></path></svg>`;
+  }
+  if (iconName === 'whatsapp') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.9A8.5 8.5 0 1 1 8.5 4.2"></path><path d="M7.2 20.8 4 21.8l1-3.1"></path><path d="M9.5 8.8c.2-.5.5-.7.9-.7.4 0 .7.2.9.6l.6 1.6c.1.3 0 .7-.2.9l-.6.7c.9 1.7 2.1 2.9 3.9 3.7l.7-.6c.2-.2.6-.3.9-.2l1.6.6c.4.2.6.5.6.9 0 .4-.2.7-.7.9l-.6.3c-.7.3-1.5.3-2.3 0-2.4-1-4.3-2.8-5.3-5.3-.3-.8-.3-1.6 0-2.3l.3-.8Z"></path></svg>`;
+  }
+  if (iconName === 'x') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l16 16M20 4 4 20"></path></svg>`;
+  }
+  if (iconName === 'trending') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>`;
+  }
+  if (iconName === 'activity') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h3l2-5 4 10 2-5h5"></path></svg>`;
+  }
+  if (iconName === 'arrow-right') {
+    return `<svg${cls} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${stroke}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg>`;
+  }
+  return '';
+}
+
+function dedupeById(items, idSelector = (item) => item && (item.id || item.user_id || item.userId || item.name || item.display_name)) {
+  const seen = new Set();
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    const key = String(idSelector(item) || '').trim();
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function getSupabaseClientSafe() {
+  return typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+}
+
+function getDrawerShareUrl(event) {
+  const eventId = String((event && event.id) || '').trim();
+  return eventId ? `https://toka-events.site/events/${encodeURIComponent(eventId)}` : window.location.href;
+}
+
+function getCategoryBadgeColor(category) {
+  const colors = {
+    Tech: '#E85D1F',
+    Music: '#4CAF50',
+    Sports: '#378ADD',
+    Business: '#F7B731',
+    Art: '#F2994A',
+    Faith: '#9B51E0',
+    'Food & Drinks': '#D16B34',
+    Campus: '#2D9CDB',
+    Community: '#27AE60'
+  };
+  return colors[category] || '#A8A8A8';
+}
+
+function getDrawerScheduleInfo(event) {
+  const startValue = event && (event.start_time || event.starts_at || event.startsAt || `${event.date || ''} ${event.time || ''}`.trim());
+  const endValue = event && (event.end_time || event.ends_at || event.endAt || `${event.date || ''} ${event.endTime || ''}`.trim());
+  const start = startValue ? window.dayjs(startValue) : null;
+  const end = endValue ? window.dayjs(endValue) : null;
+  return {
+    start: start && start.isValid() ? start : null,
+    end: end && end.isValid() ? end : null
+  };
+}
+
+function normalizeDrawerPerson(person = {}) {
+  return {
+    id: String(person.id || person.device_id || person.user_id || person.userId || person.display_name || person.name || '').trim(),
+    name: String(person.display_name || person.name || person.full_name || 'Guest').trim(),
+    role: String(person.role || person.title || 'Attendee').trim(),
+    avatarUrl: String(person.avatar_url || person.avatarUrl || '').trim()
+  };
+}
+
+function normalizeDrawerOrganizer(source = {}, event = {}) {
+  const id = String(source.id || source.user_id || source.userId || event.organiser_id || event.organiserId || event.owner_user_id || event.ownerUserId || '').trim();
+  const name = String(source.display_name || source.name || source.full_name || event.organiserName || event.organiser || 'Organiser').trim();
+  return normalizeDrawerPerson({
+    id: id || name,
+    name,
+    role: 'Organiser',
+    avatar_url: source.avatar_url || source.avatarUrl || event.organiserAvatarUrl || ''
+  });
+}
+
+function buildDrawerHostRows(event) {
+  const organiserSource = event.organiserUser || event.organiserProfile || event.organiser_user || event.organiser_profile || event.user || {};
+  const organiser = normalizeDrawerOrganizer(organiserSource, event);
+  return organiser.id ? [organiser] : [];
+}
+
+function buildDrawerAttendees(attendeeRows = []) {
+  return dedupeById((Array.isArray(attendeeRows) ? attendeeRows : []).map((row) => normalizeDrawerPerson({ ...(row.user || row.attendee || row), role: 'Going' })), (item) => item.id || item.name);
+}
+
+function getEventDescriptionText(event) {
+  return String((event && (event.description || event.about || event.summary)) || 'No description available yet.').trim();
+}
+
+function getEventTierFallback(event) {
+  const price = Number(event && (event.price_amount ?? event.price ?? 0) || 0);
+  const currency = String((event && (event.currency || 'UGX')) || 'UGX');
+  if (price <= 0) {
+    return [{
+      id: 'free-entry',
+      name: 'Free entry',
+      description: 'General access',
+      price: 0,
+      currency,
+      quantity_remaining: null
+    }];
+  }
+  return [{
+    id: 'general-admission',
+    name: 'General Admission',
+    description: 'Standard access',
+    price,
+    currency,
+    quantity_remaining: null
+  }];
+}
+
+function getDrawerDrawerEvent(event) {
+  const payload = event && event.payload && typeof event.payload === 'object' ? event.payload : {};
+  const metadata = event && event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
+  const metadataTiers = metadata.ticketing && Array.isArray(metadata.ticketing.tiers) ? metadata.ticketing.tiers : [];
+  const organiserUser = event && (event.organiser_user || event.organiser_profile || event.user || null);
+  const organiserId = event && (event.organiser_id || event.organiserId || event.owner_user_id || event.ownerUserId || (organiserUser && organiserUser.id) || '');
+  return {
+    id: String(event && event.id || ''),
+    name: String(event && (event.event_name || event.name || 'Event')).trim(),
+    category: String(event && (event.category || '')).trim(),
+    venue: String(event && (event.venue || '')).trim(),
+    city: String(event && (event.city || '')).trim(),
+    description: getEventDescriptionText(event),
+    date: event && (event.date || event.event_date || ''),
+    time: event && (event.time || event.start_time || event.starts_at || ''),
+    endTime: event && (event.endTime || event.end_time || event.ends_at || ''),
+    tags: Array.isArray(event && event.tags) ? event.tags.filter(Boolean).map((tag) => String(tag).trim()) : [],
+    organiserName: String(event && (event.organiser || event.organiser_name || event.organiserName || (organiserUser && (organiserUser.display_name || organiserUser.name || organiserUser.full_name)) || '')).trim(),
+    organiserAvatarUrl: String(organiserUser && (organiserUser.avatar_url || organiserUser.avatarUrl) || event && (event.organiserAvatarUrl || '')).trim(),
+    organiserId,
+    owner_user_id: event && (event.owner_user_id || event.ownerUserId || ''),
+    organiserUser,
+    speakers: Array.isArray(event && event.speakers) ? event.speakers : [],
+    lineup: Array.isArray(event && event.lineup) ? event.lineup : [],
+    ticketTiers: Array.isArray(event && event.ticketTiers) ? event.ticketTiers : (Array.isArray(payload.ticketTiers) ? payload.ticketTiers : metadataTiers),
+    thumbnailDataUrl: String(event && (event.thumbnailDataUrl || event.thumbnail_data_url || payload.thumbnailDataUrl || payload.thumbnail_data_url || '')).trim(),
+    thumbnailUrl: String(event && (event.thumbnailUrl || event.thumbnail_url || payload.thumbnailUrl || payload.thumbnail_url || payload.thumbnailDataUrl || payload.thumbnail_data_url || '')).trim(),
+    gradient: (event && event.gradient) || payload.gradient,
+    price: Number(event && (event.price_amount ?? event.price ?? 0) || 0),
+    currency: String(event && (event.currency || 'UGX') || 'UGX'),
+    organiser: String(event && (event.organiser || event.organiserName || 'Host')).trim(),
+    registered: Number(event && event.registered || 0),
+    metadata,
+    tags: Array.isArray(event && event.tags) ? event.tags : (Array.isArray(payload.tags) ? payload.tags : (Array.isArray(metadata.tags) ? metadata.tags : []))
+  };
+}
+
+async function fetchDrawerEventBundle(eventId) {
+  const baseEvent = getEventById(eventId);
+  const client = getSupabaseClientSafe();
+  if (!client) {
+    return {
+      event: baseEvent ? getDrawerDrawerEvent(baseEvent) : null,
+      ticketTiers: Array.isArray(baseEvent && baseEvent.ticketTiers) ? baseEvent.ticketTiers : (baseEvent && baseEvent.metadata && baseEvent.metadata.ticketing && Array.isArray(baseEvent.metadata.ticketing.tiers) ? baseEvent.metadata.ticketing.tiers : []),
+      attendees: []
+    };
+  }
+
+  const eventFetchers = [
+    () => client.from('events').select('*, organiser_user:users(id, display_name, avatar_url), organiser_profile:toka_profiles(device_id, name)').eq('id', eventId).maybeSingle(),
+    () => client.from('toka_events').select('*, organiser_user:users(id, display_name, avatar_url), organiser_profile:toka_profiles(device_id, name)').eq('id', eventId).maybeSingle(),
+    () => client.from('events').select('*').eq('id', eventId).maybeSingle(),
+    () => client.from('toka_events').select('*').eq('id', eventId).maybeSingle()
+  ];
+
+  let eventResponse = null;
+  for (let index = 0; index < eventFetchers.length; index += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const response = await eventFetchers[index]();
+    if (!response.error && response.data) {
+      eventResponse = response;
+      break;
+    }
+  }
+
+  const ticketTiersRequest = client.from('ticket_types').select('id,event_id,name,description,price,currency,quantity_total,quantity_remaining,is_visible,created_at').eq('event_id', eventId).eq('is_visible', true).order('price', { ascending: true });
+  const attendeeFetchers = [
+    () => client.from('event_attendees').select('id,event_id,user_id,ticket_type_id,registered_at,user:users(id, display_name, avatar_url)').eq('event_id', eventId).limit(10),
+    () => client.from('event_attendees').select('id,event_id,user_id,ticket_type_id,registered_at,user:toka_profiles(device_id, name)').eq('event_id', eventId).limit(10)
+  ];
+
+  const [ticketTiersResponse, attendeesFirstAttempt] = await Promise.all([
+    ticketTiersRequest,
+    attendeeFetchers[0]()
+  ]);
+
+  let attendeesResponse = attendeesFirstAttempt;
+  if (attendeesResponse && attendeesResponse.error) {
+    // eslint-disable-next-line no-await-in-loop
+    attendeesResponse = await attendeeFetchers[1]();
+  }
+
+  const eventData = eventResponse && eventResponse.data ? eventResponse.data : baseEvent;
+  const ticketTiers = ticketTiersResponse && !ticketTiersResponse.error && Array.isArray(ticketTiersResponse.data) ? ticketTiersResponse.data : [];
+  const attendees = attendeesResponse && !attendeesResponse.error && Array.isArray(attendeesResponse.data) ? attendeesResponse.data : [];
+
+  return {
+    event: getDrawerDrawerEvent(eventData || baseEvent || {}),
+    ticketTiers,
+    attendees: buildDrawerAttendees(attendees),
+    speakers: buildDrawerHostRows(getDrawerDrawerEvent(eventData || baseEvent || {}))
+  };
+}
+
+function getDrawerSelectedTierId(tiers) {
+  const visibleTiers = Array.isArray(tiers) ? tiers.filter(Boolean) : [];
+  const selected = visibleTiers[0] || null;
+  return selected ? String(selected.id || selected.name || 'free-entry') : '';
+}
+
+function getDrawerSelectedTierLabel(tier) {
+  if (!tier) {
+    return 'Free entry';
+  }
+  const price = Number(tier.price || 0);
+  return price <= 0 ? 'Free entry' : `${tier.currency || 'UGX'} ${Number(price).toLocaleString('en-US')}`;
+}
+
+function formatDrawerMetaDateRow(event) {
+  const parts = getDrawerScheduleInfo(event);
+  if (parts.start) {
+    const dateText = parts.start.format('dddd, MMM D');
+    const startText = parts.start.format('h:mm A');
+    const endText = parts.end ? parts.end.format('h:mm A') : '';
+    return `<span class="drawer-meta-strong">${escapeHtml(dateText)}</span><span> · </span><span class="drawer-meta-strong">${escapeHtml(startText)}</span>${endText ? `<span> – ${escapeHtml(endText)}</span>` : ''}`;
+  }
+  return `<span class="drawer-meta-strong">${escapeHtml(formatDateTimeLong(event))}</span>`;
+}
+
+function formatDrawerMetaVenueRow(event) {
+  return `<span class="drawer-meta-strong">${escapeHtml([event.venue, event.city].filter(Boolean).join(', ') || 'Venue TBA')}</span>`;
+}
+
+function formatDrawerMetaGoingRow(event, attendeeCount) {
+  const total = Number(event.capacity || 0) > 0 ? Number(event.capacity) - Number(attendeeCount || 0) : null;
+  const spotsLeft = total == null ? 'Spots available soon' : `${Math.max(total, 0)} spots left`;
+  return `<span class="drawer-meta-strong">${escapeHtml(String(attendeeCount || 0))} people going</span><span> · </span><span class="drawer-meta-strong">${escapeHtml(spotsLeft)}</span>`;
 }
 
 function getInitials(name) {
@@ -290,9 +595,13 @@ async function registerServiceWorker() {
     }
 
     try {
-        const path = window.location.pathname || '/';
-        const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-24`, { scope: basePath });
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+    if (typeof caches !== 'undefined' && caches && typeof caches.keys === 'function') {
+      const keys = await caches.keys();
+      const tokaCaches = keys.filter((key) => key && key.indexOf('toka-shell') >= 0);
+      await Promise.all(tokaCaches.map((key) => caches.delete(key)));
+    }
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -336,10 +645,9 @@ async function registerServiceWorker() {
     }
 
     if (typeof window.clearCachedCloudData === 'function') {
-      window.clearCachedCloudData({ preservePublicEvents: false });
+      window.clearCachedCloudData({ preservePublicEvents: true });
     }
 
-    removeScopedStorageEntries(localStorage);
     removeScopedStorageEntries(sessionStorage);
 
     if (typeof caches !== 'undefined' && caches && typeof caches.keys === 'function') {
@@ -381,18 +689,18 @@ function renderAuthHeader() {
         return;
     }
 
-    if (isAuthenticatedUser()) {
+
+      if (isAuthenticatedUser()) {
         container.innerHTML = `
-    <div class="auth-status">
-    <button type="button" class="button button-ghost button-small js-install-app-btn hidden" onclick="promptInstallApp()">Install App</button>
-    <span class="auth-email" title="${escapeHtml(TOKA_AUTH_STATE.user.email || '')}">${escapeHtml(getAuthEmailLabel())}</span>
-    <button type="button" class="button button-secondary button-small auth-sign-out" onclick="logoutUser()">Sign Out</button>
-    </div>
-  `;
+      <div class="auth-status">
+      <button type="button" class="button button-ghost button-small js-install-app-btn hidden" onclick="promptInstallApp()">Install App</button>
+      <span class="auth-email" title="${escapeHtml(TOKA_AUTH_STATE.user.email || '')}">${escapeHtml(getAuthEmailLabel())}</span>
+      <button type="button" class="button button-secondary button-small" onclick="showScreen('screen-profile')">Profile</button>
+      </div>
+      `;
         updateInstallCtaVisibility();
         return;
-    }
-
+      }
     container.innerHTML = `
     <button type="button" class="button button-ghost button-small js-install-app-btn hidden" onclick="promptInstallApp()">Install App</button>
     <button type="button" class="button button-primary button-small auth-sign-in" onclick="openAuthModal('signin')">Sign In</button>
@@ -410,6 +718,7 @@ function openAuthModal(mode = 'signin', message = '') {
     const submitButton = qs('#auth-submit');
     const toggleButton = qs('#auth-toggle-mode');
     const forgotButton = qs('#auth-forgot-password');
+    const magicLinkButton = qs('#auth-magic-link');
     const resendButton = qs('#auth-resend-confirmation');
     const signupOnlyFields = qsa('.auth-signup-only');
     const signupName = qs('#auth-full-name');
@@ -439,6 +748,9 @@ function openAuthModal(mode = 'signin', message = '') {
     }
     if (forgotButton) {
         forgotButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode === 'signup');
+    }
+    if (magicLinkButton) {
+      magicLinkButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode === 'signup');
     }
     if (resendButton) {
         resendButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
@@ -484,89 +796,82 @@ function closeAuthModal() {
     }
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
-}
-
-function toggleAuthMode() {
-    openAuthModal(TOKA_AUTH_STATE.authMode === 'signup' ? 'signin' : 'signup');
+    setAuthFeedback('');
 }
 
 async function handleAuthSubmit(event) {
     event.preventDefault();
+
     const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    const submitButton = qs('#auth-submit');
     const emailInput = qs('#auth-email');
     const passwordInput = qs('#auth-password');
-    const email = emailInput ? emailInput.value.trim() : '';
-    const password = passwordInput ? passwordInput.value : '';
-    const fullName = qs('#auth-full-name') ? qs('#auth-full-name').value.trim() : '';
-    const gender = qs('#auth-gender') ? qs('#auth-gender').value.trim() : '';
-    const countryCode = qs('#auth-country-code') ? qs('#auth-country-code').value.trim() : '';
-    const phoneLocal = qs('#auth-phone-local') ? qs('#auth-phone-local').value.trim() : '';
+    const fullNameInput = qs('#auth-full-name');
+    const genderInput = qs('#auth-gender');
+    const countryCodeInput = qs('#auth-country-code');
+    const phoneLocalInput = qs('#auth-phone-local');
 
     if (!client || !client.auth) {
         setAuthFeedback('Supabase auth is not configured in this browser session.');
         return;
     }
 
+    const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+    const password = passwordInput ? passwordInput.value : '';
+
     if (!email || !password) {
-        setAuthFeedback('Email and password are required.');
+        setAuthFeedback('Enter your email and password.');
         return;
     }
 
-    setAuthFeedback('');
-    const submitButton = qs('#auth-submit');
     if (submitButton) {
         submitButton.disabled = true;
     }
 
     try {
-        if (TOKA_AUTH_STATE.authMode === 'signup') {
-            if (!fullName || !gender) {
-                setAuthFeedback('Full name and gender are required for sign up.');
+        const isSignup = TOKA_AUTH_STATE.authMode === 'signup';
+
+        if (isSignup) {
+            const fullName = fullNameInput ? fullNameInput.value.trim() : '';
+            const gender = genderInput ? genderInput.value.trim() : '';
+            const countryCode = countryCodeInput ? countryCodeInput.value.trim() : '+256';
+            const phoneLocal = phoneLocalInput ? phoneLocalInput.value.trim() : '';
+
+            if (!fullName) {
+                setAuthFeedback('Enter your full name to continue.');
                 return;
             }
 
-            const parsedPhone = buildE164Phone(countryCode, phoneLocal);
-            if (!parsedPhone.ok) {
-                setAuthFeedback(parsedPhone.error);
-                return;
-            }
-
-            const { data, error } = await client.auth.signUp({
+            const { error } = await client.auth.signUp({
                 email,
                 password,
                 options: {
+                    emailRedirectTo: getAuthRedirectUrl(),
                     data: {
                         full_name: fullName,
                         gender,
-                        phone: parsedPhone.e164,
-                        phone_country_code: parsedPhone.countryCode,
-                        phone_national_number: parsedPhone.localNumber
-                    },
-                    emailRedirectTo: getAuthRedirectUrl()
+                        phone_country_code: countryCode,
+                        phone_national_number: phoneLocal
+                    }
                 }
             });
+
             if (error) {
                 throw error;
             }
 
-            const isRepeatedSignup = Boolean(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0);
-            if (isRepeatedSignup) {
-                setAuthFeedback('This email already exists. Sign in or resend confirmation email if not yet verified.', 'info');
-                return;
-            }
-
-            setAuthFeedback('Check your email to confirm your account.', 'success');
             saveUserProfile({
                 name: fullName,
                 gender,
-                phone: parsedPhone.e164,
-                phoneCountryCode: parsedPhone.countryCode,
-                phoneNationalNumber: parsedPhone.localNumber,
+                phoneCountryCode: countryCode,
+                phoneNationalNumber: phoneLocal,
                 email
             });
+
             if (passwordInput) {
                 passwordInput.value = '';
             }
+            setAuthFeedback('Account created. Check your email to confirm.', 'success');
             return;
         }
 
@@ -576,9 +881,10 @@ async function handleAuthSubmit(event) {
         }
 
         const session = data && data.session ? data.session : null;
-        applyAuthSession(session);
+        await applyAuthSession(session);
         setAuthFeedback('Signed in successfully.', 'success');
         closeAuthModal();
+
         if (TOKA_AUTH_STATE.pendingScreenId) {
             const nextScreen = TOKA_AUTH_STATE.pendingScreenId;
             TOKA_AUTH_STATE.pendingScreenId = '';
@@ -591,7 +897,7 @@ async function handleAuthSubmit(event) {
             renderCalendarScreen();
         }
     } catch (error) {
-        const message = error && error.message ? error.message : 'Could not sign in. Please try again.';
+      const message = getFriendlyAuthErrorMessage(error);
         setAuthFeedback(message);
     } finally {
         if (submitButton) {
@@ -599,6 +905,67 @@ async function handleAuthSubmit(event) {
         }
     }
 }
+
+  function getFriendlyAuthErrorMessage(error) {
+    const rawMessage = String(error && error.message ? error.message : '').trim();
+    const normalized = rawMessage.toLowerCase();
+    let projectHost = '';
+    try {
+      const configuredUrl = String(window.TOKA_SUPABASE_CONFIG && window.TOKA_SUPABASE_CONFIG.url ? window.TOKA_SUPABASE_CONFIG.url : '').trim();
+      if (configuredUrl) {
+        projectHost = new URL(configuredUrl).host;
+      }
+    } catch (parseError) {
+      projectHost = '';
+    }
+    if (!normalized) {
+      return 'Could not sign in. Please try again.';
+    }
+    if (normalized.includes('invalid login credentials')) {
+      return projectHost
+        ? `Password sign-in failed in this environment (${projectHost}). Use Forgot Password or Email me a magic link below.`
+        : 'Password sign-in failed for this email in the current environment. Use Forgot Password or Email me a magic link below.';
+    }
+    if (normalized.includes('email not confirmed') || normalized.includes('not confirmed')) {
+      return 'Your email is not confirmed yet. Use Resend confirmation email, then try again.';
+    }
+    if (normalized.includes('too many requests')) {
+      return 'Too many sign-in attempts. Wait a moment and try again.';
+    }
+    return rawMessage;
+  }
+
+  async function handleMagicLinkSignIn() {
+    const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    const emailInput = qs('#auth-email');
+    const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+
+    if (!client || !client.auth) {
+      setAuthFeedback('Supabase auth is not configured in this browser session.');
+      return;
+    }
+    if (!email) {
+      setAuthFeedback('Enter your email first.');
+      return;
+    }
+
+    try {
+      const { error } = await client.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: getAuthRedirectUrl(),
+          shouldCreateUser: false
+        }
+      });
+      if (error) {
+        throw error;
+      }
+      setAuthFeedback('Magic link sent. Check your inbox and spam folder.', 'success');
+    } catch (error) {
+      const message = error && error.message ? String(error.message) : 'Could not send magic link.';
+      setAuthFeedback(message);
+    }
+  }
 
 async function handleForgotPassword() {
     const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
@@ -719,17 +1086,90 @@ function formatPrice(price, currency) {
     return `${currency || 'UGX'} ${Number(price).toLocaleString('en-US')}`;
 }
 
+function parseEventDateTime(event) {
+  if (!event || !window.dayjs) {
+    return null;
+  }
+
+  if (event.startsAt) {
+    const startsAt = window.dayjs(event.startsAt);
+    if (startsAt.isValid()) {
+      return startsAt;
+    }
+  }
+
+  const datePart = String(event.date || '').trim();
+  const timePart = String(event.time || '').trim();
+  if (datePart && timePart) {
+    const parsed = window.dayjs(`${datePart} ${timePart}`, ['YYYY-MM-DD h:mm A', 'YYYY-MM-DD h:mmA', 'YYYY-MM-DD HH:mm'], true);
+    if (parsed.isValid()) {
+      return parsed;
+    }
+  }
+
+  if (datePart) {
+    const parsedDate = window.dayjs(datePart, ['YYYY-MM-DD', 'YYYY/MM/DD'], true);
+    if (parsedDate.isValid()) {
+      return parsedDate;
+    }
+    const fallback = window.dayjs(datePart);
+    if (fallback.isValid()) {
+      return fallback;
+    }
+  }
+
+  return null;
+}
+
 function formatDate(dateString) {
-    const date = new Date(`${dateString}T12:00:00`);
-    return new Intl.DateTimeFormat('en-US', {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric'
-    }).format(date);
+  if (window.dayjs) {
+    const parsed = window.dayjs(dateString, ['YYYY-MM-DD', 'YYYY/MM/DD'], true);
+    if (parsed.isValid()) {
+      return parsed.format('dddd, MMM D');
+    }
+  }
+  const date = new Date(`${dateString}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? String(dateString || '') : new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric'
+  }).format(date);
 }
 
 function formatDateTime(event) {
-    return `${formatDate(event.date)} · ${event.time} - ${event.endTime}`;
+  const parsed = parseEventDateTime(event);
+  if (parsed) {
+    return parsed.format('ddd, MMM D · h:mm A');
+  }
+  return `${formatDate(event.date)} · ${event.time || ''}`;
+}
+
+function formatDateTimeLong(event) {
+  const parsed = parseEventDateTime(event);
+  if (parsed) {
+    return parsed.format('dddd, MMM D · h:mm A');
+  }
+  return formatDateTime(event);
+}
+
+function formatDateLabel(event) {
+  const parsed = parseEventDateTime(event);
+  if (parsed) {
+    return parsed.format('ddd, MMM D');
+  }
+  return String(event.date || 'Date TBA');
+}
+
+function formatTimeLabel(event) {
+  const parsed = parseEventDateTime(event);
+  if (parsed) {
+    return parsed.format('h:mm A');
+  }
+  return String(event.time || 'Time TBA');
+}
+
+function getCategoryAccent(category) {
+  return TOKA_CATEGORY_COLORS[category] || '#E85D1F';
 }
 
 function getEventById(eventId) {
@@ -737,18 +1177,20 @@ function getEventById(eventId) {
 }
 
 function isEventPast(event) {
-    if (!event || !event.date) {
+  if (!event) {
         return false;
     }
 
-    const eventDate = new Date(`${event.date}T12:00:00`);
-    if (Number.isNaN(eventDate.getTime())) {
+  const parsed = parseEventDateTime(event);
+  if (!parsed) {
         return false;
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return eventDate < today;
+  if (window.dayjs) {
+    return parsed.isBefore(window.dayjs().startOf('day'));
+  }
+
+  return false;
 }
 
 function getTicketQrPayload(ticket, event) {
@@ -831,6 +1273,19 @@ function hasTicketForEvent(eventId) {
     return getTickets().some((ticket) => ticket.eventId === eventId);
 }
 
+function hasUpcomingTickets() {
+  if (!window.dayjs) {
+    return getTickets().length > 0;
+  }
+
+  const now = window.dayjs().startOf('day');
+  return getTickets().some((ticket) => {
+    const event = ticket.eventSnapshot || getEventById(ticket.eventId);
+    const parsed = parseEventDateTime(event);
+    return parsed ? parsed.isAfter(now.subtract(1, 'minute')) : false;
+  });
+}
+
 function recordEventCardImpression(eventId, context = 'feed') {
     const key = `${context}:${eventId}`;
     if (TOKA_APP_STATE.recordedImpressions[key]) {
@@ -850,6 +1305,46 @@ function getEventThumbnail(event) {
 
 function getUpcomingEvents(count = 3) {
     return getEvents().filter((event) => !isEventPast(event)).slice(0, count);
+}
+
+async function ensurePublicFeedHydrated(options = {}) {
+  const force = Boolean(options && options.force);
+  const now = Date.now();
+  if (TOKA_APP_STATE.publicFeedHydrationInFlight) {
+    return;
+  }
+
+  if (typeof window.syncPublicEventsFromCloud !== 'function') {
+    return;
+  }
+
+  const hasUpcoming = getUpcomingEvents(1).length > 0;
+  const hasAnyEvents = getEvents().length > 0;
+  const shouldSkip = !force && (hasUpcoming || hasAnyEvents);
+  if (shouldSkip) {
+    return;
+  }
+
+  if (!force && now - Number(TOKA_APP_STATE.lastPublicFeedHydrationAt || 0) < 12000) {
+    return;
+  }
+
+  TOKA_APP_STATE.publicFeedHydrationInFlight = true;
+  TOKA_APP_STATE.lastPublicFeedHydrationAt = now;
+  TOKA_APP_STATE.isFetchingEvents = true;
+  renderHome();
+  renderDiscover();
+
+  try {
+    await window.syncPublicEventsFromCloud({ fullRefresh: true });
+  } catch (error) {
+    console.warn('Public feed hydration failed', error);
+  } finally {
+    TOKA_APP_STATE.isFetchingEvents = false;
+    TOKA_APP_STATE.publicFeedHydrationInFlight = false;
+    renderHome();
+    renderDiscover();
+  }
 }
 
 function toast(message) {
@@ -873,7 +1368,18 @@ function updateBottomNavActive(screenId) {
     });
 }
 
+function updateTicketsNavBadge() {
+  const dot = qs('#tickets-nav-dot');
+  if (!dot) {
+    return;
+  }
+
+  dot.classList.toggle('hidden', !hasUpcomingTickets());
+}
+
 function showScreen(screenId) {
+  closeEventDrawer();
+
     if (TOKA_PROTECTED_SCREENS.has(screenId) && !isAuthenticatedUser()) {
         TOKA_AUTH_STATE.pendingScreenId = screenId;
         openAuthModal('signin', 'Sign in to continue.');
@@ -899,6 +1405,7 @@ function showScreen(screenId) {
 
     if (screenId !== 'screen-onboarding') {
         updateBottomNavActive(screenId);
+      updateTicketsNavBadge();
     }
 
     syncHashWithScreen(screenId);
@@ -907,9 +1414,15 @@ function showScreen(screenId) {
 
     if (screenId === 'screen-home') {
         renderHome();
+        if (!TOKA_APP_STATE.isFetchingEvents) {
+          ensurePublicFeedHydrated();
+        }
     }
     if (screenId === 'screen-discover') {
         renderDiscover();
+        if (!TOKA_APP_STATE.isFetchingEvents) {
+          ensurePublicFeedHydrated();
+        }
     }
     if (screenId === 'screen-my-tickets') {
         renderTickets();
@@ -1090,9 +1603,11 @@ function renderEventCards(events, container, options = {}) {
         container.innerHTML = Array.from({ length: options.count || 6 }).map(() => `
       <article class="event-card skeleton-card">
         <div class="event-cover shimmer"></div>
-        <div class="skeleton-line short"></div>
-        <div class="skeleton-line"></div>
-        <div class="skeleton-line tiny"></div>
+        <div class="event-card-body">
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line tiny"></div>
+        </div>
       </article>
     `).join('');
         return;
@@ -1110,31 +1625,50 @@ function renderEventCards(events, container, options = {}) {
 
     container.innerHTML = events.map((event) => {
         const thumbnail = getEventThumbnail(event);
-        const savedEntry = getCalendarSavedEntry(event.id);
-        const calendarIndicator = savedEntry ? `<span class="event-cal-indicator ${savedEntry.withTicket ? 'with-ticket' : 'without-ticket'}" title="Saved to calendar">${savedEntry.withTicket ? '🎫 Saved' : '○ Saved'}</span>` : '';
+        const accent = getCategoryAccent(event.category);
+        const isFree = Number(event.price || 0) <= 0;
         recordEventCardImpression(event.id, options.impressionContext || 'event-grid');
         return `
-      <article class="event-card" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
+      <article class="event-card" role="button" tabindex="0" onclick="openEventDrawer('${event.id}')" onkeydown="handleEventCardKeydown(event, '${event.id}')" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}; --category-accent: ${accent};">
         <div class="event-cover">
           <img class="event-cover-image" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} cover image" loading="lazy" decoding="async" />
           <div class="event-cover-overlay"></div>
+          <span class="event-category-badge">${getInlineIcon('tag', 12)} ${escapeHtml(event.category)}</span>
         </div>
         <div class="event-card-body">
-          <div class="event-card-topline">
-            <span class="badge">${escapeHtml(event.category)}</span>
-            <span class="event-price">${escapeHtml(formatPrice(event.price, event.currency))}</span>
-          </div>
           <h3 class="event-title">${escapeHtml(event.name)}</h3>
-          <p class="event-meta">${escapeHtml(formatDateTime(event))}</p>
-          <p class="event-meta">${escapeHtml(event.city)} · ${escapeHtml(event.venue)}</p>
+          <p class="event-meta">${getInlineIcon('calendar')} ${escapeHtml(formatDateLabel(event))}</p>
+          <p class="event-meta">${getInlineIcon('clock')} ${escapeHtml(formatTimeLabel(event))}</p>
+          <p class="event-meta">${getInlineIcon('pin')} ${escapeHtml(event.venue || event.city || 'Venue TBA')}</p>
           <div class="event-card-bottom">
-            <span class="event-capacity">${escapeHtml(String(event.registered || 0))} going ${calendarIndicator}</span>
-            <button type="button" class="button button-primary button-small" onclick="openEventDetail('${event.id}')">Get Ticket</button>
+            <span class="event-price-pill ${isFree ? 'is-free' : 'is-paid'}">${getInlineIcon('ticket')} ${escapeHtml(isFree ? 'Free' : formatPrice(event.price, event.currency))}</span>
+            <span class="event-capacity">${getInlineIcon('people')} ${escapeHtml(String(event.registered || 0))} going</span>
+          </div>
+          <div class="event-card-actions">
+            <button type="button" class="button button-primary button-small event-card-ticket-btn" onclick="openEventCardTicket(event, '${event.id}')">Buy Ticket</button>
           </div>
         </div>
       </article>
     `;
     }).join('');
+}
+
+function handleEventCardKeydown(event, eventId) {
+    if (!event) {
+        return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openEventDrawer(eventId);
+    }
+}
+
+function openEventCardTicket(domEvent, eventId) {
+    if (domEvent) {
+        domEvent.preventDefault();
+        domEvent.stopPropagation();
+    }
+    openRegistration(eventId);
 }
 
 function getTrendingEvents(limit = 8) {
@@ -1173,12 +1707,14 @@ function renderTrendingRow(containerId) {
 
     container.innerHTML = trending.map((event) => {
         const thumbnail = getEventThumbnail(event);
+        const categoryColor = getCategoryBadgeColor(event.category);
         recordEventCardImpression(event.id, containerId);
         return `
-      <article class="trending-card" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
+      <article class="trending-card" role="button" tabindex="0" onclick="openEventDrawer('${event.id}')" onkeydown="handleEventCardKeydown(event, '${event.id}')" style="--card-gradient: ${event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)'}">
         <div class="trending-thumb-wrap">
           <img class="trending-thumb" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} cover image" loading="lazy" decoding="async" />
-          <span class="badge trending-badge">🔥 Trending</span>
+          <span class="trending-category-tag" style="color:${categoryColor}; border-color:${categoryColor}26;">${escapeHtml(event.category)}</span>
+          <span class="trending-badge">${getInlineIcon('trending', 16, '#E85D1F')} Trending</span>
         </div>
         <div class="trending-body">
           <h4>${escapeHtml(event.name)}</h4>
@@ -1186,7 +1722,7 @@ function renderTrendingRow(containerId) {
           <p class="event-meta">${escapeHtml(event.city)} · ${escapeHtml(event.venue)}</p>
           <div class="trending-bottom">
             <strong>${escapeHtml(formatPrice(event.price, event.currency))}</strong>
-            <button type="button" class="button button-primary button-small" onclick="openEventDetail('${event.id}')">Get Ticket</button>
+            <button type="button" class="button button-primary button-small" onclick="openEventCardTicket(event, '${event.id}')">Buy Ticket</button>
           </div>
         </div>
       </article>
@@ -1198,7 +1734,11 @@ function renderHome() {
     const categoryContainer = qs('#home-category-chips');
     const upcomingContainer = qs('#home-upcoming-grid');
     renderCategoryChips(categoryContainer, TOKA_APP_STATE.homeCategory, 'applyHomeCategory');
+  if (TOKA_APP_STATE.isFetchingEvents) {
+    renderEventCards([], upcomingContainer, { skeleton: true, count: 3 });
+  } else {
     renderEventCards(getUpcomingEvents(3), upcomingContainer, { impressionContext: 'home-upcoming' });
+  }
     renderTrendingRow('home-trending-row');
 }
 
@@ -1213,9 +1753,491 @@ function renderDiscover() {
 
     renderTimeChips();
     renderCategoryChips(qs('#discover-category-chips'), TOKA_APP_STATE.discoverCategory, 'setDiscoverCategory');
-    renderEventCards(activeEvents, resultsContainer, { impressionContext: 'discover-results' });
+    if (TOKA_APP_STATE.isFetchingEvents) {
+      renderEventCards([], resultsContainer, { skeleton: true, count: 6 });
+    } else {
+      renderEventCards(activeEvents, resultsContainer, { impressionContext: 'discover-results' });
+    }
     renderTrendingRow('discover-trending-row');
 }
+
+  function getDrawerTierRows(event) {
+    const normalized = [];
+    const metadataTiers = event && event.metadata && event.metadata.ticketing && Array.isArray(event.metadata.ticketing.tiers) ? event.metadata.ticketing.tiers : [];
+    const sourceRows = Array.isArray(event && event.ticketTiers) ? event.ticketTiers : metadataTiers;
+    sourceRows.forEach((tier, index) => {
+      normalized.push({
+        id: String(tier.id || tier.ticket_type_id || tier.name || `tier-${index + 1}`),
+        name: String(tier.name || tier.label || `Tier ${index + 1}`),
+        description: String(tier.description || tier.summary || ''),
+        price: Number(tier.price || 0),
+        currency: String(tier.currency || event.currency || 'UGX'),
+        quantity_remaining: tier.quantity_remaining == null ? (tier.quantityRemaining == null ? null : Number(tier.quantityRemaining)) : Number(tier.quantity_remaining)
+      });
+    });
+
+    if (!normalized.length) {
+      const fallback = getEventTierFallback(event);
+      fallback.forEach((tier, index) => {
+        normalized.push({
+          id: String(tier.id || `fallback-${index + 1}`),
+          name: String(tier.name || 'Free entry'),
+          description: String(tier.description || 'General access'),
+          price: Number(tier.price || 0),
+          currency: String(tier.currency || event.currency || 'UGX'),
+          quantity_remaining: null
+        });
+      });
+    }
+
+    return dedupeById(normalized, (tier) => tier.id);
+  }
+
+  function getDrawerTierById(event, tierId) {
+    return getDrawerTierRows(event).find((tier) => String(tier.id) === String(tierId)) || null;
+  }
+
+  function getDrawerSelectedTier(event) {
+    const rows = getDrawerTierRows(event);
+    if (!rows.length) {
+      return null;
+    }
+    const selectedById = rows.find((tier) => String(tier.id) === String(TOKA_APP_STATE.eventDrawerSelectedTier || ''));
+    if (selectedById) {
+      return selectedById;
+    }
+    return rows[0];
+  }
+
+  function getDrawerHostedByRows(event, speakers) {
+    const hostedBy = [];
+    if (event.organiserId || event.owner_user_id) {
+      hostedBy.push({
+        id: String(event.organiserId || event.owner_user_id),
+        name: event.organiserName || event.organiser || 'Organiser',
+        role: 'Organiser',
+        avatarUrl: event.organiserAvatarUrl || ''
+      });
+    } else if (event.organiser) {
+      hostedBy.push({
+        id: String(event.organiser),
+        name: event.organiser,
+        role: 'Organiser',
+        avatarUrl: ''
+      });
+    }
+
+    if (Array.isArray(speakers)) {
+      hostedBy.push(...speakers.map((speaker) => ({ ...speaker, role: speaker.role || 'Speaker' })));
+    }
+
+    return dedupeById(hostedBy, (item) => item.id || item.name);
+  }
+
+  function renderDrawerSkeleton(event) {
+    const drawerContent = qs('#event-drawer-content');
+    if (!drawerContent) {
+      return;
+    }
+    drawerContent.innerHTML = `
+        <div class="event-drawer-banner-zone">
+          <div class="event-drawer-banner-media skeleton-banner shimmer"></div>
+      </div>
+        <div id="event-drawer-scroll" class="event-drawer-scroll">
+          <div class="event-drawer-section event-drawer-section--title">
+            <div class="skeleton-line short"></div>
+            <div class="skeleton-line tiny"></div>
+          </div>
+          <div class="event-drawer-divider"></div>
+          <div class="event-drawer-section">
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line tiny"></div>
+          </div>
+          <div class="event-drawer-divider"></div>
+          <div class="event-drawer-section">
+            <div class="skeleton-line short"></div>
+            <div class="skeleton-line"></div>
+          </div>
+      </div>
+        <div class="event-drawer-cta-bar"><div class="skeleton-line" style="height:52px;border-radius:12px;margin:0"></div></div>
+    `;
+  }
+
+  function renderEventDrawer(bundle, options = {}) {
+    const drawerContent = qs('#event-drawer-content');
+    if (!drawerContent) {
+      return;
+    }
+
+    const event = bundle && bundle.event ? bundle.event : getDrawerDrawerEvent(getEventById(TOKA_APP_STATE.selectedEventId) || {});
+    const thumbnail = getEventThumbnail(event);
+    const hasThumbnail = Boolean(thumbnail);
+    const description = getEventDescriptionText(event);
+    const isExpanded = TOKA_APP_STATE.eventDrawerExpandedDescription;
+    const shouldTruncate = description.length > 220;
+    const attendeeRows = dedupeById(bundle && Array.isArray(bundle.attendees) ? bundle.attendees : [], (attendee) => attendee.id || attendee.name);
+    const visibleTiers = Array.isArray(bundle && bundle.ticketTiers) ? bundle.ticketTiers.filter(Boolean) : [];
+    const ticketRows = getDrawerTierRows({ ...event, ticketTiers: visibleTiers });
+    const selectedTier = ticketRows.find((tier) => String(tier.id) === String(TOKA_APP_STATE.eventDrawerSelectedTier || '')) || ticketRows[0] || null;
+    if (!TOKA_APP_STATE.eventDrawerSelectedTier && selectedTier) {
+      TOKA_APP_STATE.eventDrawerSelectedTier = String(selectedTier.id || '');
+    }
+    const selectedTierId = selectedTier ? String(selectedTier.id) : '';
+    const ctaDisabled = Boolean(options.loading || !selectedTier);
+    const organiserName = event.organiserName || event.organiser || 'Organiser';
+    const organiserSubtitle = `Organised by ${organiserName} · ${event.city || 'City TBA'}`;
+    const attendeeCount = Number(event.registered || attendeeRows.length || 0);
+    const hostRows = buildDrawerHostRows(event);
+    const bannerMarkup = hasThumbnail
+      ? `<img class="event-drawer-banner-image" src="${escapeHtml(thumbnail)}" alt="${escapeHtml(event.name)} poster" loading="lazy" decoding="async" onerror="this.closest('.event-drawer-banner-media').classList.add('is-placeholder')" />`
+      : `<div class="event-drawer-banner-placeholder"><span>${escapeHtml(event.name || 'Event')}</span></div>`;
+    const metaDateRow = formatDrawerMetaDateRow(event);
+    const metaVenueRow = formatDrawerMetaVenueRow(event);
+    const metaGoingRow = formatDrawerMetaGoingRow(event, attendeeCount);
+    const tags = Array.isArray(event.tags)
+      ? dedupeById(event.tags.map((tag) => ({ id: String(tag).toLowerCase(), label: String(tag) })), (item) => item.id).filter((tag) => tag.label && tag.label.trim())
+      : [];
+    const descriptionClass = isExpanded ? 'event-drawer-body-copy' : 'event-drawer-body-copy is-clamped';
+
+    drawerContent.innerHTML = `
+      <div class="event-drawer-banner-zone">
+        <div class="event-drawer-banner-media ${hasThumbnail ? '' : 'is-placeholder'}">
+          ${bannerMarkup}
+          <div class="event-drawer-banner-fade"></div>
+          <div class="event-drawer-handle"></div>
+          <button type="button" class="event-drawer-share" onclick="openShareSheetFromDrawer()" aria-label="Share event">${getInlineIcon('share', 14, '#bbb')}</button>
+          <div class="event-drawer-category-pill">${getInlineIcon('activity', 14, '#E85D1F')}<span>${escapeHtml(event.category || 'Event')}</span></div>
+        </div>
+      </div>
+      <div id="event-drawer-scroll" class="event-drawer-scroll">
+        <section class="event-drawer-section event-drawer-section--title">
+          <h3 id="event-drawer-title" class="event-drawer-title">${escapeHtml(event.name || 'Event')}</h3>
+          <div class="event-drawer-subtitle">${escapeHtml(organiserSubtitle)}</div>
+        </section>
+        <div class="event-drawer-divider"></div>
+        <section class="event-drawer-section">
+          <div class="event-drawer-meta-stack">
+            <div class="event-drawer-meta-row">${getInlineIcon('calendar', 14, '#555')}<span>${metaDateRow}</span></div>
+            <div class="event-drawer-meta-row">${getInlineIcon('pin', 14, '#555')}<span>${metaVenueRow}</span></div>
+            <div class="event-drawer-meta-row">${getInlineIcon('people', 14, '#555')}<span>${metaGoingRow}</span></div>
+          </div>
+        </section>
+        <div class="event-drawer-divider"></div>
+        <section class="event-drawer-section">
+          <p class="event-drawer-label">ABOUT THIS EVENT</p>
+          <p class="${descriptionClass}">${escapeHtml(description)}</p>
+          ${shouldTruncate ? `<button type="button" class="event-drawer-readmore" onclick="toggleEventDrawerDescription()">${isExpanded ? 'Show less' : 'Read more →'}</button>` : ''}
+        </section>
+        <div class="event-drawer-divider"></div>
+        <section class="event-drawer-section">
+          <p class="event-drawer-label">HOSTED BY</p>
+          <div class="event-drawer-hosted-by">
+            ${hostRows.length ? hostRows.slice(0, 1).map((person) => `
+              <div class="hosted-by-row">
+                ${person.avatarUrl ? `<img class="hosted-by-avatar" src="${escapeHtml(person.avatarUrl)}" alt="${escapeHtml(person.name)} avatar" />` : `<span class="hosted-by-avatar fallback" style="background:${getAvatarColor(person.id || person.name)}">${escapeHtml(getInitials(person.name))}</span>`}
+                <div class="hosted-by-copy-block">
+                  <span class="hosted-by-name">${escapeHtml(person.name)}</span>
+                  <span class="hosted-by-role">Organiser</span>
+                </div>
+              </div>
+            `).join('') : `<div class="hosted-by-row"><span class="hosted-by-avatar fallback" style="background:${getAvatarColor(event.organiserId || event.organiser || 'Host')}">${escapeHtml(getInitials(organiserName))}</span><div class="hosted-by-copy-block"><span class="hosted-by-name">${escapeHtml(organiserName)}</span><span class="hosted-by-role">Organiser</span></div></div>`}
+          </div>
+        </section>
+        <div class="event-drawer-divider"></div>
+        <section class="event-drawer-section">
+          <p class="event-drawer-label">WHO'S GOING</p>
+          <div class="going-row">
+            <div class="going-avatar-stack">
+              ${attendeeRows.slice(0, 6).map((attendee, index) => attendee.avatarUrl ? `<img class="going-avatar" style="margin-left:${index === 0 ? 0 : -7}px" src="${escapeHtml(attendee.avatarUrl)}" alt="${escapeHtml(attendee.name)} avatar" title="${escapeHtml(attendee.name)}" />` : `<span class="going-avatar fallback" style="margin-left:${index === 0 ? 0 : -7}px;background:${getAvatarColor(attendee.id || attendee.name)}" title="${escapeHtml(attendee.name)}">${escapeHtml(getInitials(attendee.name))}</span>`).join('')}
+              ${attendeeRows.length > 6 ? `<span class="going-avatar more">+${attendeeRows.length - 6}</span>` : ''}
+            </div>
+            <span class="going-attending-text">${escapeHtml(`${attendeeCount} attending`)}</span>
+          </div>
+        </section>
+        ${tags.length ? `
+          <div class="event-drawer-divider"></div>
+          <section class="event-drawer-section">
+            <p class="event-drawer-label">TAGS</p>
+            <div class="tag-chip-wrap">
+              ${tags.map((tag) => `<span class="tag-chip">${escapeHtml(tag.label.startsWith('#') ? tag.label : `#${tag.label}`)}</span>`).join('')}
+            </div>
+          </section>
+        ` : ''}
+        <div class="event-drawer-divider"></div>
+        <section class="event-drawer-section">
+          <p class="event-drawer-label event-drawer-label--tickets">CHOOSE YOUR TICKET</p>
+          <div class="ticket-tier-list">
+            ${ticketRows.length ? ticketRows.map((tier) => {
+                const price = Number(tier.price || 0);
+                const isSelected = selectedTierId === String(tier.id);
+                const spots = tier.quantity_remaining == null ? '' : `<span class="ticket-tier-spots">${escapeHtml(String(tier.quantity_remaining))} spots left</span>`;
+                return `
+                  <button type="button" class="ticket-tier-card ${isSelected ? 'active' : ''}" onclick="selectEventDrawerTier('${String(tier.id).replace(/'/g, "\\'")}')" aria-pressed="${isSelected ? 'true' : 'false'}">
+                    <div class="ticket-tier-radio ${isSelected ? 'selected' : ''}" aria-hidden="true"><span></span></div>
+                    <div class="ticket-tier-copy">
+                      <span class="ticket-tier-name">${escapeHtml(tier.name || 'Tier')}</span>
+                      <span class="ticket-tier-description">${escapeHtml(tier.description || 'Select to continue')}</span>
+                    </div>
+                    <div class="ticket-tier-price-column">
+                      <span class="ticket-tier-price ${price === 0 ? 'free' : ''}">${price === 0 ? 'Free' : escapeHtml(`${tier.currency || event.currency || 'UGX'} ${Number(price).toLocaleString('en-US')}`)}</span>
+                      ${spots}
+                    </div>
+                  </button>
+                `;
+            }).join('') : `<button type="button" class="ticket-tier-card fallback" onclick="selectEventDrawerTier('free-entry')" aria-pressed="true"><div class="ticket-tier-radio selected" aria-hidden="true"><span></span></div><div class="ticket-tier-copy"><span class="ticket-tier-name">Free entry</span><span class="ticket-tier-description">General access</span></div><div class="ticket-tier-price-column"><span class="ticket-tier-price free">Free</span></div></button>`}
+          </div>
+        </section>
+      </div>
+      <div class="event-drawer-cta-bar">
+        <button type="button" class="button button-primary button-block event-drawer-cta" ${ctaDisabled ? 'disabled' : ''} onclick="proceedEventDrawerTicket()">
+          <span>Buy Ticket</span>
+          ${getInlineIcon('arrow-right', 16, '#fff')}
+        </button>
+      </div>
+    `;
+  }
+
+  async function openEventDrawer(eventId) {
+    const modal = qs('#event-drawer-modal');
+    if (!modal) {
+      return;
+    }
+
+    TOKA_APP_STATE.selectedEventId = eventId;
+    TOKA_APP_STATE.eventDrawerOpen = true;
+    TOKA_APP_STATE.eventDrawerLoading = true;
+    TOKA_APP_STATE.eventDrawerShareOpen = false;
+    TOKA_APP_STATE.eventDrawerExpandedDescription = false;
+    TOKA_APP_STATE.eventDrawerRequestId += 1;
+    const requestId = TOKA_APP_STATE.eventDrawerRequestId;
+
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    window.requestAnimationFrame(() => {
+      modal.classList.add('open');
+      const scrollContent = qs('#event-drawer-scroll');
+      if (scrollContent) {
+        scrollContent.scrollTop = 0;
+      }
+    });
+
+    renderDrawerSkeleton(getEventById(eventId));
+
+    const baseEvent = getEventById(eventId) || {};
+    const baseDrawerEvent = getDrawerDrawerEvent(baseEvent);
+    const fallbackTiers = Array.isArray(baseDrawerEvent.ticketTiers) ? baseDrawerEvent.ticketTiers : [];
+    const fallbackRows = getDrawerTierRows({ ...baseDrawerEvent, ticketTiers: fallbackTiers });
+    TOKA_APP_STATE.eventDrawerSelectedTier = fallbackRows.length ? getDrawerSelectedTierId(fallbackRows) : '';
+
+    try {
+      const bundle = await fetchDrawerEventBundle(eventId);
+      if (!TOKA_APP_STATE.eventDrawerOpen || requestId !== TOKA_APP_STATE.eventDrawerRequestId) {
+        return;
+      }
+      TOKA_APP_STATE.eventDrawerLoading = false;
+      TOKA_APP_STATE.eventDrawerData = bundle;
+      const bundleRows = getDrawerTierRows({ ...(bundle.event || {}), ticketTiers: Array.isArray(bundle.ticketTiers) ? bundle.ticketTiers : [] });
+      TOKA_APP_STATE.eventDrawerSelectedTier = bundleRows.length ? getDrawerSelectedTierId(bundleRows) : '';
+      renderEventDrawer(bundle);
+    } catch (error) {
+      console.warn('Event drawer fetch failed', error);
+      if (!TOKA_APP_STATE.eventDrawerOpen || requestId !== TOKA_APP_STATE.eventDrawerRequestId) {
+        return;
+      }
+      TOKA_APP_STATE.eventDrawerLoading = false;
+      TOKA_APP_STATE.eventDrawerData = {
+        event: baseDrawerEvent,
+        ticketTiers: fallbackTiers,
+        attendees: [],
+        speakers: buildDrawerHostRows(baseDrawerEvent)
+      };
+      renderEventDrawer(TOKA_APP_STATE.eventDrawerData);
+    }
+  }
+
+  function closeEventDrawer() {
+    const modal = qs('#event-drawer-modal');
+    const shareModal = qs('#share-sheet-modal');
+    TOKA_APP_STATE.eventDrawerOpen = false;
+    TOKA_APP_STATE.eventDrawerShareOpen = false;
+    TOKA_APP_STATE.eventDrawerRequestId += 1;
+    if (shareModal) {
+      shareModal.classList.remove('open');
+      shareModal.setAttribute('aria-hidden', 'true');
+      window.setTimeout(() => shareModal.classList.add('hidden'), 300);
+    }
+    if (!modal) {
+      return;
+    }
+
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    window.setTimeout(() => {
+      if (!TOKA_APP_STATE.eventDrawerOpen) {
+        modal.classList.add('hidden');
+      }
+    }, 300);
+  }
+
+  function toggleEventDrawerDescription() {
+    TOKA_APP_STATE.eventDrawerExpandedDescription = !TOKA_APP_STATE.eventDrawerExpandedDescription;
+    if (TOKA_APP_STATE.eventDrawerData) {
+      renderEventDrawer(TOKA_APP_STATE.eventDrawerData);
+    }
+  }
+
+  function selectEventDrawerTier(tierId) {
+    TOKA_APP_STATE.eventDrawerSelectedTier = tierId;
+    if (TOKA_APP_STATE.eventDrawerData) {
+      renderEventDrawer(TOKA_APP_STATE.eventDrawerData);
+    }
+  }
+
+  function proceedEventDrawerTicket() {
+    if (!TOKA_APP_STATE.selectedEventId) {
+      return;
+    }
+      let selectedTierId = TOKA_APP_STATE.eventDrawerSelectedTier || '';
+      if (!selectedTierId && TOKA_APP_STATE.eventDrawerData && TOKA_APP_STATE.eventDrawerData.event) {
+        const fallbackRows = getDrawerTierRows({
+          ...TOKA_APP_STATE.eventDrawerData.event,
+          ticketTiers: Array.isArray(TOKA_APP_STATE.eventDrawerData.ticketTiers) ? TOKA_APP_STATE.eventDrawerData.ticketTiers : []
+        });
+        selectedTierId = fallbackRows.length ? String(fallbackRows[0].id || '') : '';
+      }
+      TOKA_APP_STATE.selectedTicketTierId = selectedTierId;
+    closeEventDrawer();
+    openRegistration(TOKA_APP_STATE.selectedEventId);
+  }
+
+  function setShareModalContent(bundle) {
+    const shareContent = qs('#share-sheet-content');
+    if (!shareContent) {
+      return;
+    }
+    const event = bundle && bundle.event ? bundle.event : getDrawerDrawerEvent(getEventById(TOKA_APP_STATE.selectedEventId) || {});
+    const url = getDrawerShareUrl(event);
+    shareContent.innerHTML = `
+      <div class="share-sheet-header">Share this event</div>
+      <div class="share-sheet-actions">
+        <button type="button" class="share-action" onclick="shareEventViaWhatsApp()">
+          <span class="share-action-icon whatsapp">${getInlineIcon('share', 18, '#25D366')}</span>
+          <span class="share-action-label">WhatsApp</span>
+        </button>
+        <button type="button" class="share-action" onclick="shareEventViaX()">
+          <span class="share-action-icon x">${getInlineIcon('share', 18, '#1DA1F2')}</span>
+          <span class="share-action-label">Twitter / X</span>
+        </button>
+        <button type="button" class="share-action" onclick="copyEventShareLink()">
+          <span class="share-action-icon copy">${getInlineIcon('link', 18, '#aaa')}</span>
+          <span class="share-action-label">Copy link</span>
+        </button>
+        <button type="button" class="share-action" onclick="shareEventNatively()">
+          <span class="share-action-icon more">${getInlineIcon('share', 18, '#aaa')}</span>
+          <span class="share-action-label">More</span>
+        </button>
+      </div>
+      <div class="share-sheet-qr-wrap">
+        <p class="share-sheet-qr-label">Or scan to share</p>
+        <div class="share-sheet-qr-card"><canvas id="share-sheet-qr" width="160" height="160"></canvas></div>
+      </div>
+    `;
+
+    renderShareQrCode(url);
+  }
+
+  async function renderShareQrCode(url) {
+    const canvas = qs('#share-sheet-qr');
+    if (!canvas) {
+      return;
+    }
+
+    const QR = window.TOKA_QRCode || (window.TOKA_QRCodePromise ? await window.TOKA_QRCodePromise.catch(() => null) : null);
+    if (QR && typeof QR.toCanvas === 'function') {
+      await QR.toCanvas(canvas, url, {
+        width: 160,
+        margin: 1,
+        color: {
+          dark: '#111111',
+          light: '#ffffff'
+        }
+      });
+      return;
+    }
+
+    const context = canvas.getContext('2d');
+    if (context) {
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#111';
+      context.font = '12px DM Sans, sans-serif';
+      context.fillText('QR unavailable', 34, 84);
+    }
+  }
+
+  function openShareSheetFromDrawer() {
+    const modal = qs('#share-sheet-modal');
+    if (!modal) {
+      return;
+    }
+    TOKA_APP_STATE.eventDrawerShareOpen = true;
+    setShareModalContent(TOKA_APP_STATE.eventDrawerData || { event: getDrawerDrawerEvent(getEventById(TOKA_APP_STATE.selectedEventId) || {}) });
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    window.requestAnimationFrame(() => modal.classList.add('open'));
+  }
+
+  function closeShareSheet() {
+    const modal = qs('#share-sheet-modal');
+    if (!modal) {
+      return;
+    }
+    TOKA_APP_STATE.eventDrawerShareOpen = false;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    window.setTimeout(() => modal.classList.add('hidden'), 300);
+  }
+
+  async function shareEventViaWhatsApp() {
+    const event = TOKA_APP_STATE.eventDrawerData && TOKA_APP_STATE.eventDrawerData.event ? TOKA_APP_STATE.eventDrawerData.event : getDrawerDrawerEvent(getEventById(TOKA_APP_STATE.selectedEventId) || {});
+    const url = getDrawerShareUrl(event);
+    const text = `${event.name} on ${formatDrawerDateTime(event)} at ${event.venue || event.city || 'Toka Events'}. ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  }
+
+  async function shareEventViaX() {
+    const event = TOKA_APP_STATE.eventDrawerData && TOKA_APP_STATE.eventDrawerData.event ? TOKA_APP_STATE.eventDrawerData.event : getDrawerDrawerEvent(getEventById(TOKA_APP_STATE.selectedEventId) || {});
+    const url = getDrawerShareUrl(event);
+    const text = encodeURIComponent(`${event.name} on ${formatDrawerDateTime(event)} · ${url}`);
+    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank', 'noopener,noreferrer');
+  }
+
+  async function copyEventShareLink() {
+    const event = TOKA_APP_STATE.eventDrawerData && TOKA_APP_STATE.eventDrawerData.event ? TOKA_APP_STATE.eventDrawerData.event : getDrawerDrawerEvent(getEventById(TOKA_APP_STATE.selectedEventId) || {});
+    const url = getDrawerShareUrl(event);
+    await copyToClipboard(url);
+    toast('Copied!');
+  }
+
+  async function shareEventNatively() {
+    const event = TOKA_APP_STATE.eventDrawerData && TOKA_APP_STATE.eventDrawerData.event ? TOKA_APP_STATE.eventDrawerData.event : getDrawerDrawerEvent(getEventById(TOKA_APP_STATE.selectedEventId) || {});
+    const url = getDrawerShareUrl(event);
+    if (navigator.share) {
+      await navigator.share({
+        title: event.name,
+        text: `${event.name} on ${formatDrawerDateTime(event)}`,
+        url
+      });
+      return;
+    }
+    await copyToClipboard(url);
+    toast('Copied!');
+  }
+
+  function shareSelectedEventFromDrawer() {
+    openShareSheetFromDrawer();
+  }
 
 function renderDetailScreen(event) {
     if (!event) {
@@ -1721,6 +2743,7 @@ function openRegistration(eventId) {
   }
 
   TOKA_APP_STATE.selectedRegisterEventId = event.id;
+  TOKA_APP_STATE.selectedTicketTierId = TOKA_APP_STATE.selectedTicketTierId || TOKA_APP_STATE.eventDrawerSelectedTier || '';
   renderRegistrationScreen(event);
   showScreen('screen-register');
 }
@@ -1731,15 +2754,33 @@ function renderRegistrationScreen(event) {
   const form = qs('#register-form');
   const paymentPhone = qs('#payment-phone');
   const profile = getUserProfile();
+  const ticketTiers = getDrawerTierRows(getDrawerDrawerEvent(event));
+  const selectedTier = ticketTiers.find((tier) => String(tier.id) === String(TOKA_APP_STATE.selectedTicketTierId || TOKA_APP_STATE.eventDrawerSelectedTier || '')) || ticketTiers[0] || null;
+  TOKA_APP_STATE.selectedTicketTierId = selectedTier ? String(selectedTier.id) : '';
 
   if (summary) {
     summary.innerHTML = `
       <div>
         <p class="eyebrow">Registering for</p>
         <h3>${escapeHtml(event.name)}</h3>
-        <p class="text-muted">${escapeHtml(formatDateTime(event))}</p>
+        <p class="text-muted">${escapeHtml(formatDrawerDateTime(getDrawerDrawerEvent(event)))}</p>
       </div>
-      <div class="register-summary-price">${escapeHtml(formatPrice(event.price, event.currency))}</div>
+      <div class="register-summary-price">${escapeHtml(selectedTier && Number(selectedTier.price || 0) === 0 ? 'Free' : selectedTier ? `${selectedTier.currency || event.currency || 'UGX'} ${Number(selectedTier.price || 0).toLocaleString('en-US')}` : formatPrice(event.price, event.currency))}</div>
+      <div class="register-tier-summary">
+        <p class="eyebrow">Selected tier</p>
+        <div class="register-tier-summary-card">
+          <strong>${escapeHtml(selectedTier ? selectedTier.name : 'Free entry')}</strong>
+          <span>${escapeHtml(selectedTier ? (selectedTier.description || 'General access') : 'General access')}</span>
+        </div>
+        <div class="register-tier-options">
+          ${ticketTiers.map((tier) => `
+            <button type="button" class="register-tier-option ${String(selectedTier && selectedTier.id) === String(tier.id) ? 'active' : ''}" onclick="selectRegistrationTicketTier('${String(tier.id).replace(/'/g, "\\'")}')">
+              <span>${escapeHtml(tier.name || 'Tier')}</span>
+              <small>${escapeHtml(Number(tier.price || 0) === 0 ? 'Free' : `${tier.currency || event.currency || 'UGX'} ${Number(tier.price || 0).toLocaleString('en-US')}`)}</small>
+            </button>
+          `).join('')}
+        </div>
+      </div>
     `;
   }
 
@@ -1760,8 +2801,8 @@ function renderRegistrationScreen(event) {
   }
 
   if (methodContainer) {
-    const isFreeEvent = event.price === 0;
-    const freeOption = event.price === 0 ? `
+    const isFreeEvent = Number(selectedTier && selectedTier.price || event.price || 0) === 0;
+    const freeOption = isFreeEvent ? `
       <label class="payment-option radio-card radio-row ${isFreeEvent ? 'active' : ''}">
         <input type="radio" name="paymentMethod" value="Free" ${isFreeEvent ? 'checked' : ''} />
         <span>
@@ -1791,6 +2832,14 @@ function renderRegistrationScreen(event) {
   }
 
   togglePaymentNumberInput();
+}
+
+function selectRegistrationTicketTier(tierId) {
+  TOKA_APP_STATE.selectedTicketTierId = tierId;
+  const event = getEventById(TOKA_APP_STATE.selectedRegisterEventId);
+  if (event) {
+    renderRegistrationScreen(event);
+  }
 }
 
 function renderConfirmation(ticket) {
@@ -1846,6 +2895,9 @@ function submitRegistration(event) {
   const paymentMethod = qs('input[name="paymentMethod"]:checked')?.value || 'MTN Mobile Money';
   const paymentPhoneRaw = qs('#payment-phone')?.value.trim();
   const agreed = qs('#register-terms')?.checked;
+  const ticketTiers = getDrawerTierRows(getDrawerDrawerEvent(event));
+  const selectedTier = ticketTiers.find((tier) => String(tier.id) === String(TOKA_APP_STATE.selectedTicketTierId || TOKA_APP_STATE.eventDrawerSelectedTier || '')) || ticketTiers[0] || null;
+  const ticketPrice = Number(selectedTier && selectedTier.price != null ? selectedTier.price : event.price || 0);
 
   if (!fullName || !phoneRaw || !agreed) {
     toast('Please complete the required fields and accept the terms.');
@@ -1864,7 +2916,7 @@ function submitRegistration(event) {
     return;
   }
 
-  if (event.price > 0 && paymentMethod !== 'Free' && !paymentPhoneRaw) {
+  if (ticketPrice > 0 && paymentMethod !== 'Free' && !paymentPhoneRaw) {
     toast('Enter the number to charge.');
     return;
   }
@@ -1896,13 +2948,18 @@ function submitRegistration(event) {
     source,
     paymentMethod,
     paymentPhone: normalizedPaymentPhone.e164,
+    ticketTypeId: selectedTier ? selectedTier.id : '',
+    ticketTypeName: selectedTier ? selectedTier.name : 'Free entry',
+    ticketTypeDescription: selectedTier ? (selectedTier.description || '') : 'General access',
+    ticketTypePrice: ticketPrice,
+    ticketTypeCurrency: selectedTier ? (selectedTier.currency || event.currency || 'UGX') : (event.currency || 'UGX'),
     createdAt: new Date().toISOString(),
     status: 'Confirmed',
     referralCode: getReferralCode() || generateReferralCode(fullName)
   };
 
   saveTicket(ticket);
-  recordTicketSaleMetric(event.id, event.price, ticket.createdAt);
+  recordTicketSaleMetric(event.id, ticketPrice, ticket.createdAt);
   saveEventToCalendar(event.id, true, false);
 
   const updatedEvent = {
@@ -1938,6 +2995,7 @@ function renderTickets() {
   if (!tickets.length) {
     emptyState.classList.remove('hidden');
     list.innerHTML = '';
+    updateTicketsNavBadge();
     return;
   }
 
@@ -1965,6 +3023,7 @@ function renderTickets() {
       </article>
     `;
   }).join('');
+  updateTicketsNavBadge();
 }
 
 function toggleTicketBody(ticketId) {
@@ -2022,7 +3081,7 @@ function renderProfile() {
       <button type="button" class="settings-item" onclick="shareTokaApp()"><span>Share Toka</span><span>↗</span></button>
       <button type="button" class="settings-item" onclick="aboutToka()"><span>About Toka</span><span>i</span></button>
       <button type="button" class="settings-item danger" onclick="deleteUserAccount()"><span>Delete Account</span><span>⛔</span></button>
-      <button type="button" class="settings-item danger" onclick="logoutUser()"><span>Logout</span><span>⎋</span></button>
+      <button type="button" class="settings-item danger" onclick="logoutUser()"><span>Sign Out</span><span>⎋</span></button>
     `;
     updateInstallCtaVisibility();
   }
@@ -3115,6 +4174,29 @@ function goOnboardingBack() {
 }
 
 function bindGlobalEvents() {
+  const authModal = qs('#auth-modal');
+  if (authModal) {
+    authModal.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.classList.contains('auth-modal-backdrop') || target.closest('#auth-close')) {
+        closeAuthModal();
+      }
+    });
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    const modal = qs('#auth-modal');
+    if (modal && !modal.classList.contains('hidden')) {
+      closeAuthModal();
+    }
+  });
+
   const authForm = qs('#auth-form');
   if (authForm) {
     authForm.addEventListener('submit', handleAuthSubmit);
@@ -3128,6 +4210,11 @@ function bindGlobalEvents() {
   const authForgot = qs('#auth-forgot-password');
   if (authForgot) {
     authForgot.addEventListener('click', handleForgotPassword);
+  }
+
+  const authMagicLink = qs('#auth-magic-link');
+  if (authMagicLink) {
+    authMagicLink.addEventListener('click', handleMagicLinkSignIn);
   }
 
   const authResend = qs('#auth-resend-confirmation');
@@ -3240,6 +4327,17 @@ function bindGlobalEvents() {
     }, { passive: true });
   }
 
+  const drawerPanel = qs('#event-drawer');
+  if (drawerPanel) {
+    drawerPanel.style.transform = '';
+  }
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && TOKA_APP_STATE.eventDrawerOpen) {
+      closeEventDrawer();
+    }
+  });
+
   window.addEventListener('hashchange', () => {
     const screen = resolveScreenFromHash();
     if (screen !== TOKA_APP_STATE.currentScreen) {
@@ -3278,35 +4376,44 @@ async function initApp() {
   });
   renderAuthHeader();
 
-  if (typeof getSupabaseClient === 'function') {
-    const client = getSupabaseClient();
-    if (client && client.auth) {
-      const { data } = await client.auth.getSession();
-      await applyAuthSession(data ? data.session : null);
-      client.auth.onAuthStateChange((event, session) => {
-        applyAuthSession(session);
-        if (event === 'SIGNED_OUT') {
-          closeAuthModal();
-        }
-      });
+  TOKA_APP_STATE.isFetchingEvents = true;
+  renderHome();
+  renderDiscover();
+
+  try {
+    if (typeof getSupabaseClient === 'function') {
+      const client = getSupabaseClient();
+      if (client && client.auth) {
+        const { data } = await client.auth.getSession();
+        await applyAuthSession(data ? data.session : null);
+        client.auth.onAuthStateChange((event, session) => {
+          applyAuthSession(session);
+          if (event === 'SIGNED_OUT') {
+            closeAuthModal();
+          }
+        });
+      }
     }
-  }
 
-  renderAuthHeader();
+    renderAuthHeader();
 
-  if (TOKA_AUTH_STATE.isAuthenticated && typeof window.initializeSupabaseSync === 'function') {
-    await window.initializeSupabaseSync();
-  }
+    if (TOKA_AUTH_STATE.isAuthenticated && typeof window.initializeSupabaseSync === 'function') {
+      await window.initializeSupabaseSync();
+    }
 
-  if (typeof window.syncPublicEventsFromCloud === 'function') {
-    await window.syncPublicEventsFromCloud({ fullRefresh: true }).catch((error) => {
-      console.warn('Public event sync failed', error);
-    });
+    if (typeof window.syncPublicEventsFromCloud === 'function') {
+      await window.syncPublicEventsFromCloud({ fullRefresh: true });
+    }
+  } catch (error) {
+    console.warn('Startup sync failed', error);
+  } finally {
+    TOKA_APP_STATE.isFetchingEvents = false;
   }
 
   seedMockComments();
   syncCalendarEntriesFromTickets();
   initializeLandingState();
+  await ensurePublicFeedHydrated({ force: true });
   const searchInput = qs('#discover-search');
   if (searchInput) {
     searchInput.value = TOKA_APP_STATE.discoverQuery;
@@ -3342,12 +4449,21 @@ async function initApp() {
   }
 
   updateInstallCtaVisibility();
+  updateTicketsNavBadge();
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
 
 window.showScreen = showScreen;
 window.openEventDetail = openEventDetail;
+window.openEventDrawer = openEventDrawer;
+window.closeEventDrawer = closeEventDrawer;
+window.handleEventCardKeydown = handleEventCardKeydown;
+window.openEventCardTicket = openEventCardTicket;
+window.toggleEventDrawerDescription = toggleEventDrawerDescription;
+window.selectEventDrawerTier = selectEventDrawerTier;
+window.shareSelectedEventFromDrawer = shareSelectedEventFromDrawer;
+window.proceedEventDrawerTicket = proceedEventDrawerTicket;
 window.openRegistration = openRegistration;
 window.applyHomeCategory = applyHomeCategory;
 window.setDiscoverCategory = setDiscoverCategory;

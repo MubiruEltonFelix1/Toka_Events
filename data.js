@@ -24,7 +24,9 @@ const TOKA_SUPABASE_TABLES = {
     comments: 'toka_comments',
     updates: 'toka_updates',
     calendarEntries: 'toka_calendar_entries',
-    eventMetrics: 'toka_event_metrics'
+    eventMetrics: 'toka_event_metrics',
+    ticketTypes: 'ticket_types',
+    eventAttendees: 'event_attendees'
 };
 
 let TOKA_SUPABASE_CLIENT = null;
@@ -198,6 +200,19 @@ async function ensureSupabaseAuth() {
         return TOKA_SUPABASE_USER_ID;
     }
 
+    // Production fallback: if RLS requires authenticated reads, establish
+    // an anonymous session when no user is signed in.
+    try {
+        const anonResult = await client.auth.signInAnonymously();
+        const anonUser = anonResult && anonResult.data && anonResult.data.user ? anonResult.data.user : null;
+        if (anonUser && anonUser.id) {
+            setSupabaseOwnerUserId(anonUser.id);
+            return TOKA_SUPABASE_USER_ID;
+        }
+    } catch (error) {
+        reportSupabaseError('auth.signInAnonymously', error);
+    }
+
     setSupabaseOwnerUserId('');
     return '';
 }
@@ -303,25 +318,93 @@ async function supabaseSelectPublicEvents(sinceTimestamp = '') {
         return [];
     }
 
-    let query = client
-        .from(TOKA_SUPABASE_TABLES.events)
-        .select('*')
-        .order('updated_at', { ascending: true });
-
-    if (sinceTimestamp) {
-        query = query.gt('updated_at', sinceTimestamp);
-    }
-
-    const { data, error } = await query;
-
-    if (error || !Array.isArray(data)) {
-        if (error) {
-            reportSupabaseError('select.publicEvents', error);
+    const buildQuery = (tableName) => {
+        let query = client
+            .from(tableName)
+            .select('*')
+            .order('updated_at', { ascending: true });
+        if (sinceTimestamp) {
+            query = query.gt('updated_at', sinceTimestamp);
         }
-        return [];
+        return query;
+    };
+
+    const [primary, secondary] = await Promise.all([
+        buildQuery(TOKA_SUPABASE_TABLES.events),
+        buildQuery('events')
+    ]);
+
+    if (primary.error) {
+        reportSupabaseError('select.publicEvents.toka_events', primary.error);
+    }
+    if (secondary.error) {
+        reportSupabaseError('select.publicEvents.events', secondary.error);
     }
 
-    return data;
+    const mergedRows = [];
+    if (Array.isArray(primary.data)) {
+        mergedRows.push(...primary.data);
+    }
+    if (Array.isArray(secondary.data)) {
+        mergedRows.push(...secondary.data);
+    }
+
+    return pickLatestRowsByKey(mergedRows, 'id');
+}
+
+function mapPublicEventRowToEvent(row) {
+    if (!row || typeof row !== 'object') {
+        return null;
+    }
+
+    const payload = row.payload && typeof row.payload === 'object' ? row.payload : null;
+    const id = String(
+        (payload && payload.id) ||
+        row.id ||
+        row.event_id ||
+        ''
+    ).trim();
+
+    if (!id) {
+        return null;
+    }
+
+    const startsAt = row.starts_at || row.start_time || (payload && payload.startsAt) || '';
+    const endsAt = row.ends_at || row.end_time || (payload && payload.endsAt) || '';
+    const eventDate = startsAt ? new Date(startsAt) : null;
+    const endDate = endsAt ? new Date(endsAt) : null;
+
+    const safeDate = eventDate && !Number.isNaN(eventDate.getTime()) ? eventDate.toISOString().slice(0, 10) : (payload && payload.date) || '';
+    const safeStartTime = eventDate && !Number.isNaN(eventDate.getTime()) ?
+        eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) :
+        ((payload && payload.time) || '');
+    const safeEndTime = endDate && !Number.isNaN(endDate.getTime()) ?
+        endDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) :
+        ((payload && payload.endTime) || '');
+
+    const normalized = {
+        ...(payload || {}),
+        id,
+        name: String((payload && payload.name) || row.event_name || row.name || 'Event').trim(),
+        category: String((payload && payload.category) || row.category || 'Community').trim(),
+        city: String((payload && payload.city) || row.city || '').trim(),
+        venue: String((payload && payload.venue) || row.venue || '').trim(),
+        organiser: String((payload && payload.organiser) || row.organiser || row.organizer || '').trim(),
+        date: safeDate,
+        time: safeStartTime,
+        endTime: safeEndTime,
+        startsAt: startsAt || (payload && payload.startsAt) || '',
+        endsAt: endsAt || (payload && payload.endsAt) || '',
+        currency: String((payload && payload.currency) || row.currency || 'UGX').trim(),
+        price: Number((payload && payload.price != null ? payload.price : row.price_amount) || 0),
+        capacity: Number((payload && payload.capacity != null ? payload.capacity : row.capacity) || 0),
+        tags: Array.isArray((payload && payload.tags) || row.tags) ? ((payload && payload.tags) || row.tags) : [],
+        metadata: (payload && payload.metadata) || row.metadata || {},
+        ownerUserId: String(row.owner_user_id || (payload && payload.ownerUserId) || '').trim(),
+        createdBy: (payload && payload.createdBy) || 'cloud'
+    };
+
+    return normalized;
 }
 
 async function supabaseSelectHostAudienceTickets() {
@@ -473,6 +556,28 @@ async function upsertEventCloudImmediate(event) {
             reportSupabaseError('upsert.events', error);
             markPendingEventSync(event.id);
             return false;
+        }
+        const ticketing = event && event.metadata && event.metadata.ticketing && typeof event.metadata.ticketing === 'object' ? event.metadata.ticketing : {};
+        const ticketTiers = Array.isArray(ticketing.tiers) ? ticketing.tiers : Array.isArray(event.ticketTiers) ? event.ticketTiers : [];
+        const tierRows = ticketTiers.map((tier, index) => ({
+            id: String(tier.id || tier.ticket_type_id || tier.label || tier.name || `tier-${index + 1}`),
+            event_id: event.id,
+            name: String(tier.name || tier.label || `Tier ${index + 1}`),
+            description: String(tier.description || tier.summary || ''),
+            price: Number(tier.price || 0),
+            currency: String(tier.currency || event.currency || 'UGX'),
+            quantity_total: tier.quantityTotal == null ? null : Number(tier.quantityTotal),
+            quantity_remaining: tier.quantityRemaining == null ? null : Number(tier.quantityRemaining),
+            is_visible: tier.isVisible !== false,
+            created_at: new Date().toISOString()
+        }));
+
+        await client.from(TOKA_SUPABASE_TABLES.ticketTypes).delete().eq('event_id', event.id);
+        if (tierRows.length) {
+            const tierInsert = await client.from(TOKA_SUPABASE_TABLES.ticketTypes).insert(tierRows);
+            if (tierInsert && tierInsert.error) {
+                reportSupabaseError('upsert.ticketTypes', tierInsert.error);
+            }
         }
         clearPendingEventSync(event.id);
         return true;
@@ -775,16 +880,7 @@ function mergeRemotePublicEventRowsIntoLocal(eventRows, options = {}) {
     const shouldPruneMissing = Boolean(options && options.fullRefresh);
     const deletedIds = new Set(getDeletedEventIds());
     const remoteEvents = pickLatestRowsByKey(eventRows, 'id')
-        .map((row) => {
-            const payload = row && row.payload && typeof row.payload === 'object' ? row.payload : null;
-            if (!payload) {
-                return null;
-            }
-            return {
-                ...payload,
-                ownerUserId: String(row.owner_user_id || payload.ownerUserId || '')
-            };
-        })
+        .map((row) => mapPublicEventRowToEvent(row))
         .filter((event) => event && event.id && !deletedIds.has(String(event.id)));
     const previous = getPublicEvents();
     const pendingIds = new Set(getPendingEventSyncIds());
@@ -849,11 +945,14 @@ async function syncPublicEventsFromCloud(options = {}) {
         return false;
     }
 
+    await ensureSupabaseAuth();
+
     const shouldForceFullRefresh = Boolean(options && options.fullRefresh);
     const cursor = shouldForceFullRefresh ? '' : getPublicEventsSyncCursor();
     const eventRows = await supabaseSelectPublicEvents(cursor);
 
-    const hasChanges = mergeRemotePublicEventRowsIntoLocal(eventRows, { fullRefresh: shouldForceFullRefresh });
+    const shouldPruneMissing = shouldForceFullRefresh && eventRows.length > 0;
+    const hasChanges = mergeRemotePublicEventRowsIntoLocal(eventRows, { fullRefresh: shouldPruneMissing });
     if (hasChanges) {
         notifyCloudEventsUpdated();
     }
@@ -1326,6 +1425,22 @@ function saveTicket(ticket) {
     }
     writeStorage(TOKA_STORAGE_KEYS.tickets, tickets);
     upsertTicketCloud(ticket);
+    const client = getSupabaseClient();
+    const userId = getCurrentAuthUserId() || getSupabaseOwnerUserId();
+    if (client && userId && ticket && ticket.eventId) {
+        queueSupabaseWrite(async() => {
+            const payload = {
+                event_id: ticket.eventId,
+                user_id: userId,
+                ticket_type_id: ticket.ticketTypeId || null,
+                registered_at: ticket.createdAt || new Date().toISOString()
+            };
+            const { error } = await client.from(TOKA_SUPABASE_TABLES.eventAttendees).upsert(payload, { onConflict: 'event_id,user_id' });
+            if (error) {
+                reportSupabaseError('upsert.eventAttendees', error);
+            }
+        });
+    }
     return ticket;
 }
 
