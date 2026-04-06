@@ -1054,12 +1054,13 @@ function deleteEventCloud(eventId) {
         return;
     }
 
-    const ownerUserId = getSupabaseOwnerUserId();
-    if (!ownerUserId) {
-        return;
-    }
-
     queueSupabaseWrite(async() => {
+        const ownerUserId = getSupabaseOwnerUserId() || await ensureSupabaseAuth();
+        if (!ownerUserId) {
+            reportSupabaseError('delete.events', new Error('Missing owner user id during event delete.'));
+            return;
+        }
+
         const { error } = await client
             .from(TOKA_SUPABASE_TABLES.events)
             .delete()
@@ -1068,6 +1069,13 @@ function deleteEventCloud(eventId) {
 
         if (error) {
             reportSupabaseError('delete.events', error);
+            return;
+        }
+
+        try {
+            await syncSharedEventsFromCloud({ fullRefresh: true });
+        } catch (error) {
+            reportSupabaseError('delete.events.refresh', error);
         }
     });
 }
