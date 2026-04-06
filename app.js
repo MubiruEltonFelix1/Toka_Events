@@ -37,6 +37,10 @@ const TOKA_PWA_INSTALL_PROMPT_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 const TOKA_HOST_PUBLISH_DUPLICATE_WINDOW_MS = 12000;
 
+const TOKA_CLIENT_RESET_VERSION = '20260406-1';
+const TOKA_CLIENT_RESET_STORAGE_KEY = 'toka_client_reset_version';
+const TOKA_STORAGE_PREFIX = 'toka_';
+
 const TOKA_AUTH_STATE = {
     session: null,
     user: null,
@@ -288,11 +292,72 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-17`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-18`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
 }
+
+  function removeScopedStorageEntries(storage) {
+    if (!storage) {
+      return;
+    }
+
+    const removable = [];
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
+      if (!key) {
+        continue;
+      }
+      if (key.startsWith(TOKA_STORAGE_PREFIX)) {
+        removable.push(key);
+      }
+    }
+
+    removable.forEach((key) => {
+      try {
+        storage.removeItem(key);
+      } catch (error) {
+        // no-op
+      }
+    });
+  }
+
+  async function runClientDataResetIfNeeded() {
+    let appliedVersion = '';
+    try {
+      appliedVersion = String(localStorage.getItem(TOKA_CLIENT_RESET_STORAGE_KEY) || '');
+    } catch (error) {
+      appliedVersion = '';
+    }
+
+    if (appliedVersion === TOKA_CLIENT_RESET_VERSION) {
+      return;
+    }
+
+    if (typeof window.clearCachedCloudData === 'function') {
+      window.clearCachedCloudData();
+    }
+
+    removeScopedStorageEntries(localStorage);
+    removeScopedStorageEntries(sessionStorage);
+
+    if (typeof caches !== 'undefined' && caches && typeof caches.keys === 'function') {
+      try {
+        const keys = await caches.keys();
+        const tokaCaches = keys.filter((key) => key && (key.indexOf('toka') >= 0 || key.indexOf('Toka') >= 0));
+        await Promise.all(tokaCaches.map((key) => caches.delete(key)));
+      } catch (error) {
+        console.warn('Client cache reset skipped', error);
+      }
+    }
+
+    try {
+      localStorage.setItem(TOKA_CLIENT_RESET_STORAGE_KEY, TOKA_CLIENT_RESET_VERSION);
+    } catch (error) {
+      // no-op
+    }
+  }
 
 function setAuthFeedback(message, type = 'error') {
     TOKA_AUTH_STATE.feedbackMessage = String(message || '');
@@ -3118,6 +3183,7 @@ function initializeLandingState() {
 }
 
 async function initApp() {
+  await runClientDataResetIfNeeded();
   registerPwaInstallHandlers();
   await registerServiceWorker();
   bindGlobalEvents();
