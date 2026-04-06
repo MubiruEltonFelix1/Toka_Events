@@ -156,6 +156,10 @@ function getSupabaseOwnerUserId() {
     return TOKA_SUPABASE_USER_ID || (window.TOKA_AUTH_STATE && window.TOKA_AUTH_STATE.user ? window.TOKA_AUTH_STATE.user.id : '') || '';
 }
 
+function getCurrentAuthUserId() {
+    return String((window.TOKA_AUTH_STATE && window.TOKA_AUTH_STATE.user && window.TOKA_AUTH_STATE.user.id) || '').trim();
+}
+
 function setSupabaseOwnerUserId(userId) {
     TOKA_SUPABASE_USER_ID = String(userId || '');
 }
@@ -622,7 +626,16 @@ function mergeRemoteEventRowsIntoLocal(eventRows, options = {}) {
     updateEventsSyncCursorFromRows(eventRows);
     const deletedIds = new Set(getDeletedEventIds());
     const remoteEvents = pickLatestRowsByKey(eventRows, 'id')
-        .map((row) => row.payload)
+        .map((row) => {
+            const payload = row && row.payload && typeof row.payload === 'object' ? row.payload : null;
+            if (!payload) {
+                return null;
+            }
+            return {
+                ...payload,
+                ownerUserId: String(row.owner_user_id || payload.ownerUserId || '')
+            };
+        })
         .filter((event) => event && event.id && !deletedIds.has(String(event.id)));
     const previous = getSavedEvents();
     const shouldPruneMissing = Boolean(options && options.fullRefresh);
@@ -1077,24 +1090,36 @@ function saveTicket(ticket) {
 }
 
 function getSavedEvents() {
-    return readStorage(TOKA_STORAGE_KEYS.events, []);
+    const events = readStorage(TOKA_STORAGE_KEYS.events, []);
+    if (!Array.isArray(events)) {
+        return [];
+    }
+
+    const userId = getCurrentAuthUserId() || getSupabaseOwnerUserId();
+    if (!userId) {
+        return events.filter((event) => event && event.id);
+    }
+
+    return events.filter((event) => event && event.id && String(event.ownerUserId || '') === userId);
 }
 
 function saveEvent(event) {
     if (!event || !event.id) {
         return null;
     }
+    const userId = getCurrentAuthUserId() || getSupabaseOwnerUserId();
+    const eventWithOwner = userId ? { ...event, ownerUserId: userId } : { ...event };
     unmarkDeletedEventId(event.id);
     const events = getSavedEvents();
     const existingIndex = events.findIndex((item) => item.id === event.id);
     if (existingIndex >= 0) {
-        events[existingIndex] = event;
+        events[existingIndex] = eventWithOwner;
     } else {
-        events.unshift(event);
+        events.unshift(eventWithOwner);
     }
     writeStorage(TOKA_STORAGE_KEYS.events, events);
-    upsertEventCloud(event);
-    return event;
+    upsertEventCloud(eventWithOwner);
+    return eventWithOwner;
 }
 
 function deleteEventCloud(eventId) {

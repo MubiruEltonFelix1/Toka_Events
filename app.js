@@ -288,7 +288,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-14`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-15`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -2500,6 +2500,10 @@ function openHostDashboard() {
 
 function getHostedEvents() {
   const allEvents = getEvents();
+  const ownerUserId = String((TOKA_AUTH_STATE && TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id) || '').trim();
+  if (ownerUserId) {
+    return allEvents.filter((event) => String(event && event.ownerUserId || '') === ownerUserId);
+  }
   return allEvents.filter((event) => userIsOrganiser(event));
 }
 
