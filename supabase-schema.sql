@@ -557,6 +557,51 @@ create trigger trg_toka_events_cascade_delete
 after delete on public.toka_events
 for each row execute function public.toka_cascade_event_delete();
 
+-- Global event delete RPC for cross-device/account unpublish.
+-- The caller must own at least one row with this event id.
+create or replace function public.toka_delete_event_global(p_event_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    caller_id uuid := auth.uid();
+    owns_event boolean := false;
+begin
+    if p_event_id is null or btrim(p_event_id) = '' then
+        raise exception 'Event id is required';
+    end if;
+
+    if caller_id is null then
+        raise exception 'Authentication required';
+    end if;
+
+    select exists (
+        select 1
+        from public.toka_events e
+        where e.id = p_event_id
+          and e.owner_user_id = caller_id
+    ) into owns_event;
+
+    if not owns_event then
+        raise exception 'Not authorized to delete this event';
+    end if;
+
+    delete from public.toka_tickets where event_id = p_event_id;
+    delete from public.toka_comments where event_id = p_event_id;
+    delete from public.toka_updates where event_id = p_event_id;
+    delete from public.toka_calendar_entries where event_id = p_event_id;
+    delete from public.toka_event_metrics where event_id = p_event_id;
+    delete from public.toka_events where id = p_event_id;
+
+    return true;
+end;
+$$;
+
+revoke all on function public.toka_delete_event_global(text) from public;
+grant execute on function public.toka_delete_event_global(text) to authenticated;
+
 -- ML-oriented views.
 -- Drop first so Postgres does not attempt in-place column rename/order changes
 -- when view definitions evolve.

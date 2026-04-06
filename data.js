@@ -718,7 +718,7 @@ function startSupabaseRealtimeEventsSync() {
             table: TOKA_SUPABASE_TABLES.events,
             filter: `owner_user_id=eq.${ownerUserId}`
         }, () => {
-            syncSharedEventsFromCloud().catch((error) => {
+            syncSharedEventsFromCloud({ fullRefresh: true }).catch((error) => {
                 reportSupabaseError('realtime.sharedEvents', error);
             });
         })
@@ -729,7 +729,7 @@ function startSupabaseAutoSync() {
     stopSupabaseAutoSync();
     startSupabaseRealtimeEventsSync();
     TOKA_SUPABASE_SYNC_INTERVAL_ID = setInterval(() => {
-        syncSharedEventsFromCloud().catch((error) => {
+        syncSharedEventsFromCloud({ fullRefresh: true }).catch((error) => {
             reportSupabaseError('autoSync.sharedEvents', error);
         });
     }, TOKA_SUPABASE_SYNC_INTERVAL_MS);
@@ -1107,6 +1107,19 @@ function deleteEventCloud(eventId) {
         const ownerUserId = getSupabaseOwnerUserId() || await ensureSupabaseAuth();
         if (!ownerUserId) {
             reportSupabaseError('delete.events', new Error('Missing owner user id during event delete.'));
+            return;
+        }
+
+        const { error: rpcError } = await client.rpc('toka_delete_event_global', {
+            p_event_id: eventId
+        });
+
+        if (!rpcError) {
+            try {
+                await syncSharedEventsFromCloud({ fullRefresh: true });
+            } catch (error) {
+                reportSupabaseError('delete.events.refresh', error);
+            }
             return;
         }
 
