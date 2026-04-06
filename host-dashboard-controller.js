@@ -139,8 +139,67 @@
                 ];
             });
 
-            const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(','));
-            return csvLines.join('\n');
+            return [header, ...rows].map((row) => row.map(toCsvCell).join(',')).join('\n');
+        }
+
+        function getFinanceBreakdown(events) {
+            const refunds = getRefundRequests(events);
+            const approvedRefundAmount = refunds
+                .filter((entry) => entry.status === 'approved')
+                .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+            const pendingRefundAmount = refunds
+                .filter((entry) => entry.status === 'pending' || entry.status === 'requested')
+                .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+
+            const base = getFinanceSnapshot(events);
+            const netAfterRefunds = base.estimatedNet - approvedRefundAmount;
+            const payoutReady = Math.max(base.completed - approvedRefundAmount, 0);
+
+            return {
+                ...base,
+                approvedRefundAmount,
+                pendingRefundAmount,
+                netAfterRefunds,
+                payoutReady,
+                refundCount: refunds.length
+            };
+        }
+
+        function buildFinanceCsv(events) {
+            const header = [
+                'Event Name',
+                'Gross Revenue',
+                'Estimated Fee',
+                'Estimated Net',
+                'Approved Refund Amount',
+                'Pending Refund Amount',
+                'Payout Ready'
+            ];
+
+            const refunds = getRefundRequests(events);
+
+            const rows = events.map((event) => {
+                const metric = getMetricSafe(event.id);
+                const gross = Number(metric.ticketRevenueTotal || 0);
+                const estimatedFee = gross * 0.08;
+                const estimatedNet = gross - estimatedFee;
+                const eventRefunds = refunds.filter((entry) => entry.eventId === event.id);
+                const approvedRefund = eventRefunds.filter((entry) => entry.status === 'approved').reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+                const pendingRefund = eventRefunds
+                    .filter((entry) => entry.status === 'pending' || entry.status === 'requested')
+                    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+                return [
+                    event.name || 'Untitled',
+                    gross,
+                    estimatedFee,
+                    estimatedNet,
+                    approvedRefund,
+                    pendingRefund,
+                    Math.max(estimatedNet - approvedRefund, 0)
+                ];
+            });
+
+            return [header, ...rows].map((row) => row.map(toCsvCell).join(',')).join('\n');
         }
 
         function toDomId(value) {
@@ -248,9 +307,10 @@
                     const event = events.find((item) => item.id === ticket.eventId);
                     return {
                         id: ticket.id,
+                        eventId: ticket.eventId,
                         eventName: event ? event.name : 'Unknown Event',
-                        attendee: ticket.name || ticket.email || ticket.phone || 'Unknown attendee',
-                        amount: Number(ticket.amount || ticket.price || 0),
+                        attendee: ticket.fullName || ticket.name || ticket.email || ticket.phone || 'Unknown attendee',
+                        amount: Number(ticket.amount || ticket.price || (event ? event.price : 0) || 0),
                         reason: ticket.refundReason || 'No reason supplied',
                         requestedAt: ticket.refundRequestedAt || ticket.createdAt || '',
                         status
@@ -376,7 +436,7 @@
         }
 
         function renderOverview(events) {
-            const finance = getFinanceSnapshot(events);
+            const finance = getFinanceBreakdown(events);
             const alerts = getEventHealthAlerts(events);
             const rows = events.slice(0, 6).map((event) => {
                 const status = typeof getEventStatusBadge === 'function' ? getEventStatusBadge(event) : { label: 'Upcoming', className: 'is-upcoming' };
@@ -399,6 +459,7 @@
         <div class="host-toolbar-actions">
           <button type="button" class="button button-secondary button-small" onclick="TokaHostDashboardController.exportCsv()">Export CSV</button>
           <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.navigate('analytics')">Open Analytics</button>
+          <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.navigate('finance')">Open Finance</button>
         </div>
       </section>
       <section class="host-finance-grid" aria-label="Finance snapshot">
@@ -413,9 +474,9 @@
           <p class="text-muted">After estimated platform fees (8%)</p>
         </article>
         <article class="host-finance-card card">
-          <p class="eyebrow">Pending Payout</p>
-          <h3>${typeof formatPrice === 'function' ? formatPrice(finance.pending, 'UGX') : finance.pending}</h3>
-          <p class="text-muted">Revenue from upcoming events</p>
+          <p class="eyebrow">Payout Ready</p>
+          <h3>${typeof formatPrice === 'function' ? formatPrice(finance.payoutReady, 'UGX') : finance.payoutReady}</h3>
+          <p class="text-muted">Completed events minus approved refunds</p>
         </article>
       </section>
       <section class="host-alerts card" aria-label="Event health alerts">
@@ -597,6 +658,16 @@
 
   function renderAudience(events) {
     const audience = getAudienceSegments(events);
+    const genderSummary = getTicketsSafe()
+      .filter((ticket) => getHostedEventIdSet(events).has(String(ticket.eventId || '')))
+      .reduce((acc, ticket) => {
+        const gender = String(ticket.gender || '').trim().toLowerCase();
+        if (gender === 'female') acc.female += 1;
+        else if (gender === 'male') acc.male += 1;
+        else acc.unknown += 1;
+        return acc;
+      }, { female: 0, male: 0, unknown: 0 });
+
     const attendeeRows = audience.attendees.map((entry) => `
       <tr>
         <td>${escapeHtml(entry.identity)}</td>
@@ -612,8 +683,8 @@
         <article class="host-kpi-card"><p>Total Attendees</p><strong>${audience.summary.total}</strong></article>
         <article class="host-kpi-card"><p>Repeat</p><strong>${audience.summary.repeat}</strong></article>
         <article class="host-kpi-card"><p>High Value</p><strong>${audience.summary.highValue}</strong></article>
-        <article class="host-kpi-card"><p>First Timers</p><strong>${audience.summary.firstTimers}</strong></article>
-        <article class="host-kpi-card"><p>No Contact</p><strong>${audience.summary.noContact}</strong></article>
+        <article class="host-kpi-card"><p>Female</p><strong>${genderSummary.female}</strong></article>
+        <article class="host-kpi-card"><p>Male</p><strong>${genderSummary.male}</strong></article>
       </section>
       <section class="host-panel card" aria-label="Top attendees">
         <div class="host-panel-head">
@@ -637,6 +708,99 @@
           </table>
         </div>
       </section>
+      <section class="host-panel card" aria-label="Audience quality">
+        <div class="host-panel-head">
+          <h3>Audience Data Quality</h3>
+        </div>
+        <p class="text-muted">Unknown gender records: ${genderSummary.unknown}. Encourage attendees to complete full profile data during signup.</p>
+      </section>
+    `;
+  }
+
+  function renderFinance(events) {
+    const finance = getFinanceBreakdown(events);
+    const refunds = getRefundRequests(events);
+    const refundByEvent = new Map();
+
+    refunds.forEach((entry) => {
+      const current = refundByEvent.get(entry.eventId) || { pending: 0, approved: 0, rejected: 0, amountPending: 0, amountApproved: 0 };
+      if (entry.status === 'approved') {
+        current.approved += 1;
+        current.amountApproved += Number(entry.amount || 0);
+      } else if (entry.status === 'rejected') {
+        current.rejected += 1;
+      } else {
+        current.pending += 1;
+        current.amountPending += Number(entry.amount || 0);
+      }
+      refundByEvent.set(entry.eventId, current);
+    });
+
+    const financeRows = events.map((event) => {
+      const metric = getMetricSafe(event.id);
+      const gross = Number(metric.ticketRevenueTotal || 0);
+      const fee = gross * 0.08;
+      const refundState = refundByEvent.get(event.id) || { pending: 0, approved: 0, rejected: 0, amountPending: 0, amountApproved: 0 };
+      const payout = Math.max(gross - fee - refundState.amountApproved, 0);
+      return `
+        <tr>
+          <td>${escapeHtml(event.name || 'Untitled')}</td>
+          <td>${typeof formatPrice === 'function' ? formatPrice(gross, event.currency || 'UGX') : gross}</td>
+          <td>${typeof formatPrice === 'function' ? formatPrice(fee, event.currency || 'UGX') : fee}</td>
+          <td>${refundState.pending}</td>
+          <td>${typeof formatPrice === 'function' ? formatPrice(refundState.amountApproved, event.currency || 'UGX') : refundState.amountApproved}</td>
+          <td>${typeof formatPrice === 'function' ? formatPrice(payout, event.currency || 'UGX') : payout}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <section class="host-finance-grid" aria-label="Finance operations summary">
+        <article class="host-finance-card card">
+          <p class="eyebrow">Net After Refunds</p>
+          <h3>${typeof formatPrice === 'function' ? formatPrice(finance.netAfterRefunds, 'UGX') : finance.netAfterRefunds}</h3>
+          <p class="text-muted">Estimated net after approved refunds</p>
+        </article>
+        <article class="host-finance-card card">
+          <p class="eyebrow">Pending Refund Exposure</p>
+          <h3>${typeof formatPrice === 'function' ? formatPrice(finance.pendingRefundAmount, 'UGX') : finance.pendingRefundAmount}</h3>
+          <p class="text-muted">Potential payout reduction</p>
+        </article>
+        <article class="host-finance-card card">
+          <p class="eyebrow">Payout Ready</p>
+          <h3>${typeof formatPrice === 'function' ? formatPrice(finance.payoutReady, 'UGX') : finance.payoutReady}</h3>
+          <p class="text-muted">Completed events minus approved refunds</p>
+        </article>
+      </section>
+      <section class="host-toolbar card" aria-label="Finance quick actions">
+        <div class="host-toolbar-actions">
+          <button type="button" class="button button-secondary button-small" onclick="TokaHostDashboardController.exportFinanceCsv()">Export Finance CSV</button>
+          <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.navigate('analytics')">Open Refund Queue</button>
+        </div>
+      </section>
+      <section class="host-panel card" aria-label="Event finance ledger">
+        <div class="host-panel-head">
+          <h3>Event Finance Ledger</h3>
+          <p class="text-muted">Revenue, fees, refunds, payout per event</p>
+        </div>
+        <div class="host-table-wrap">
+          <table class="host-table">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Gross</th>
+                <th>Fee (8%)</th>
+                <th>Pending Refunds</th>
+                <th>Approved Refund Amount</th>
+                <th>Payout Ready</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${financeRows || '<tr><td colspan="6" class="text-muted">No finance records available.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </section>
     `;
   }
 
@@ -647,7 +811,8 @@
       dashboard: 'Overview',
       events: 'Events',
       analytics: 'Analytics',
-      audience: 'Audience'
+      audience: 'Audience',
+      finance: 'Finance'
     };
     const label = labels[route] || 'Overview';
     if (titleEl) {
@@ -752,6 +917,10 @@
       content.innerHTML = renderAudience(hosted);
       return;
     }
+    if (route === 'finance') {
+      content.innerHTML = renderFinance(hosted);
+      return;
+    }
 
     content.innerHTML = renderOverview(hosted);
   }
@@ -791,6 +960,33 @@
     }
   }
 
+  function exportFinanceCsv() {
+    const hosted = getHostedEventsSafe();
+    if (!hosted.length) {
+      if (typeof toast === 'function') {
+        toast('No finance records to export yet.');
+      }
+      return;
+    }
+
+    const csv = buildFinanceCsv(hosted);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `toka-host-finance-${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    if (typeof toast === 'function') {
+      toast('Finance CSV downloaded.');
+    }
+  }
+
   function bindNav() {
     const nav = document.querySelector('#host-admin-nav');
     if (!nav || nav.dataset.bound === '1') {
@@ -814,6 +1010,7 @@
     navigate,
     bindNav,
     exportCsv,
+    exportFinanceCsv,
     saveTicketingConfig: (encodedEventId) => saveTicketingConfig(decodeURIComponent(encodedEventId)),
     updateRefundStatus
   };
