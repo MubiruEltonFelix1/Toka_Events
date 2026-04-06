@@ -22,118 +22,118 @@
         }
 
         function daysUntilEvent(dateString) {
-          const eventDate = new Date(`${dateString}T12:00:00`);
-          if (Number.isNaN(eventDate.getTime())) {
-            return 999;
-          }
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          return Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
+            const eventDate = new Date(`${dateString}T12:00:00`);
+            if (Number.isNaN(eventDate.getTime())) {
+                return 999;
+            }
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            return Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
         }
 
         function getEventHealthAlerts(events) {
-          const alerts = [];
+            const alerts = [];
 
-          events.forEach((event) => {
-            const metric = getMetricSafe(event.id);
-            const impressions = Number(metric.impressions || 0);
-            const sold = Number(metric.ticketSalesCount || 0);
-            const capacity = Number(event.capacity || 0);
-            const registered = Number(event.registered || 0);
-            const conversion = impressions > 0 ? (sold / impressions) * 100 : 0;
-            const fillRate = capacity > 0 ? (registered / capacity) * 100 : 0;
-            const daysLeft = daysUntilEvent(event.date);
+            events.forEach((event) => {
+                const metric = getMetricSafe(event.id);
+                const impressions = Number(metric.impressions || 0);
+                const sold = Number(metric.ticketSalesCount || 0);
+                const capacity = Number(event.capacity || 0);
+                const registered = Number(event.registered || 0);
+                const conversion = impressions > 0 ? (sold / impressions) * 100 : 0;
+                const fillRate = capacity > 0 ? (registered / capacity) * 100 : 0;
+                const daysLeft = daysUntilEvent(event.date);
 
-            if (impressions >= 120 && conversion < 1.2) {
-              alerts.push({
-                severity: 'high',
-                message: `${event.name}: low conversion (${conversion.toFixed(1)}%). Consider pricing or copy updates.`
-              });
-            }
+                if (impressions >= 120 && conversion < 1.2) {
+                    alerts.push({
+                        severity: 'high',
+                        message: `${event.name}: low conversion (${conversion.toFixed(1)}%). Consider pricing or copy updates.`
+                    });
+                }
 
-            if (daysLeft <= 7 && daysLeft >= 0 && fillRate < 35) {
-              alerts.push({
-                severity: 'medium',
-                message: `${event.name}: event is ${daysLeft}d away with only ${fillRate.toFixed(1)}% capacity filled.`
-              });
-            }
+                if (daysLeft <= 7 && daysLeft >= 0 && fillRate < 35) {
+                    alerts.push({
+                        severity: 'medium',
+                        message: `${event.name}: event is ${daysLeft}d away with only ${fillRate.toFixed(1)}% capacity filled.`
+                    });
+                }
 
-            if (fillRate >= 85 && daysLeft > 0) {
-              alerts.push({
-                severity: 'low',
-                message: `${event.name}: strong demand (${fillRate.toFixed(1)}% filled). Consider opening more inventory.`
-              });
-            }
-          });
+                if (fillRate >= 85 && daysLeft > 0) {
+                    alerts.push({
+                        severity: 'low',
+                        message: `${event.name}: strong demand (${fillRate.toFixed(1)}% filled). Consider opening more inventory.`
+                    });
+                }
+            });
 
-          return alerts.slice(0, 6);
+            return alerts.slice(0, 6);
         }
 
         function getFinanceSnapshot(events) {
-          const totals = events.reduce((acc, event) => {
-            const metric = getMetricSafe(event.id);
-            const revenue = Number(metric.ticketRevenueTotal || 0);
-            const eventDaysLeft = daysUntilEvent(event.date);
-            acc.gross += revenue;
-            if (eventDaysLeft > 0) {
-              acc.pending += revenue;
-            }
-            if (eventDaysLeft <= 0) {
-              acc.completed += revenue;
-            }
-            return acc;
-          }, { gross: 0, pending: 0, completed: 0 });
+            const totals = events.reduce((acc, event) => {
+                const metric = getMetricSafe(event.id);
+                const revenue = Number(metric.ticketRevenueTotal || 0);
+                const eventDaysLeft = daysUntilEvent(event.date);
+                acc.gross += revenue;
+                if (eventDaysLeft > 0) {
+                    acc.pending += revenue;
+                }
+                if (eventDaysLeft <= 0) {
+                    acc.completed += revenue;
+                }
+                return acc;
+            }, { gross: 0, pending: 0, completed: 0 });
 
-          const estimatedFees = totals.gross * 0.08;
-          const estimatedNet = totals.gross - estimatedFees;
-          return {
-            gross: totals.gross,
-            pending: totals.pending,
-            completed: totals.completed,
-            estimatedFees,
-            estimatedNet
-          };
+            const estimatedFees = totals.gross * 0.08;
+            const estimatedNet = totals.gross - estimatedFees;
+            return {
+                gross: totals.gross,
+                pending: totals.pending,
+                completed: totals.completed,
+                estimatedFees,
+                estimatedNet
+            };
         }
 
         function toCsvCell(value) {
-          const text = String(value == null ? '' : value);
-          const escaped = text.replace(/"/g, '""');
-          return `"${escaped}"`;
+            const text = String(value == null ? '' : value);
+            const escaped = text.replace(/"/g, '""');
+            return `"${escaped}"`;
         }
 
         function buildEventsCsv(events) {
-          const header = [
-            'Event Name',
-            'Date',
-            'City',
-            'Capacity',
-            'Registered',
-            'Tickets Sold',
-            'Impressions',
-            'Conversion %',
-            'Revenue'
-          ];
-
-          const rows = events.map((event) => {
-            const metric = getMetricSafe(event.id);
-            const impressions = Number(metric.impressions || 0);
-            const sold = Number(metric.ticketSalesCount || 0);
-            const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(2) : '0.00';
-            return [
-              event.name || 'Untitled',
-              event.date || '',
-              event.city || '',
-              Number(event.capacity || 0),
-              Number(event.registered || 0),
-              sold,
-              impressions,
-              conversion,
-              Number(metric.ticketRevenueTotal || 0)
+            const header = [
+                'Event Name',
+                'Date',
+                'City',
+                'Capacity',
+                'Registered',
+                'Tickets Sold',
+                'Impressions',
+                'Conversion %',
+                'Revenue'
             ];
-          });
 
-          const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(','));
-          return csvLines.join('\n');
+            const rows = events.map((event) => {
+                const metric = getMetricSafe(event.id);
+                const impressions = Number(metric.impressions || 0);
+                const sold = Number(metric.ticketSalesCount || 0);
+                const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(2) : '0.00';
+                return [
+                    event.name || 'Untitled',
+                    event.date || '',
+                    event.city || '',
+                    Number(event.capacity || 0),
+                    Number(event.registered || 0),
+                    sold,
+                    impressions,
+                    conversion,
+                    Number(metric.ticketRevenueTotal || 0)
+                ];
+            });
+
+            const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(','));
+            return csvLines.join('\n');
         }
 
         function renderMetricCards(events) {
@@ -159,8 +159,8 @@
         }
 
         function renderOverview(events) {
-          const finance = getFinanceSnapshot(events);
-          const alerts = getEventHealthAlerts(events);
+            const finance = getFinanceSnapshot(events);
+            const alerts = getEventHealthAlerts(events);
             const rows = events.slice(0, 6).map((event) => {
                 const status = typeof getEventStatusBadge === 'function' ? getEventStatusBadge(event) : { label: 'Upcoming', className: 'is-upcoming' };
                 const metric = getMetricSafe(event.id);
