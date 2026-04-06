@@ -292,7 +292,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-20`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-21`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -2567,18 +2567,25 @@ function clearHostThumbnail() {
 }
 
 function openHostDashboard() {
+  if (!hasHostDashboardAccess()) {
+    showScreen('screen-host');
+    return;
+  }
   TOKA_APP_STATE.hostDashboardRoute = 'dashboard';
   window.location.hash = '#/host/dashboard';
   showScreen('screen-host-dashboard');
 }
 
 function getHostedEvents() {
-  const allEvents = getEvents();
   const ownerUserId = String((TOKA_AUTH_STATE && TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id) || '').trim();
   if (!ownerUserId) {
     return [];
   }
-  return allEvents.filter((event) => String((event && event.ownerUserId) || '') === ownerUserId);
+  return getSavedEvents().filter((event) => String((event && event.ownerUserId) || '') === ownerUserId);
+}
+
+function hasHostDashboardAccess() {
+  return Boolean(TOKA_AUTH_STATE && TOKA_AUTH_STATE.isAuthenticated && getHostedEvents().length > 0);
 }
 
 function getRevenueSeries(eventId, points = 7) {
@@ -2625,6 +2632,23 @@ function getEventStatusBadge(event) {
 }
 
 function renderHostDashboard() {
+  if (!hasHostDashboardAccess()) {
+    const guard = qs('#host-dashboard-guard');
+    const content = qs('#host-dashboard-content');
+    if (guard) {
+      guard.classList.remove('hidden');
+      guard.innerHTML = `
+        <h3>Host access only</h3>
+        <p class="text-muted">Sign in as the account that created a host event to access this dashboard.</p>
+        <button type="button" class="button button-primary" onclick="showScreen('screen-host')">Create Event</button>
+      `;
+    }
+    if (content) {
+      content.innerHTML = '';
+    }
+    return;
+  }
+
   if (window.TokaHostDashboardController && typeof window.TokaHostDashboardController.render === 'function') {
     window.TokaHostDashboardController.render();
     return;
@@ -3298,6 +3322,7 @@ window.openCalendarEventModal = openCalendarEventModal;
 window.closeCalendarEventModal = closeCalendarEventModal;
 window.openAuthModal = openAuthModal;
 window.closeAuthModal = closeAuthModal;
+window.hasHostDashboardAccess = hasHostDashboardAccess;
 window.openHostDashboard = openHostDashboard;
 window.clearHostThumbnail = clearHostThumbnail;
 window.startOnboarding = startOnboarding;

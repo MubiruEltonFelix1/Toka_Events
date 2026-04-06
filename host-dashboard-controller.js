@@ -14,6 +14,13 @@
             return [];
         }
 
+        function hasHostDashboardAccessSafe() {
+          if (typeof hasHostDashboardAccess === 'function') {
+            return hasHostDashboardAccess();
+          }
+          return false;
+        }
+
         function getTicketsSafe() {
             if (typeof getTickets === 'function') {
                 return getTickets();
@@ -890,6 +897,17 @@
     const hosted = getHostedEventsSafe();
 
     if (!guard || !content) {
+      return;
+    }
+
+    if (!hasHostDashboardAccessSafe()) {
+      guard.classList.remove('hidden');
+      guard.innerHTML = `
+        <h3>Host access only</h3>
+        <p class="text-muted">Sign in with the account that created a host event to open this dashboard.</p>
+        <button type="button" class="button button-primary" onclick="showScreen('screen-host')">Create Event</button>
+      `;
+      content.innerHTML = '';
       return;
     }
 
