@@ -837,6 +837,7 @@ window.syncSharedEventsFromCloud = syncSharedEventsFromCloud;
 window.startSupabaseAutoSync = startSupabaseAutoSync;
 window.stopSupabaseAutoSync = stopSupabaseAutoSync;
 window.deleteSavedEvent = deleteSavedEvent;
+window.clearCachedCloudData = clearCachedCloudData;
 
 const TOKA_PUBLIC_HOLIDAYS = [
     { id: 'hol-2026-01-01', date: '2026-01-01', name: "New Year's Day", scope: 'National' },
@@ -1097,7 +1098,7 @@ function getSavedEvents() {
 
     const userId = getCurrentAuthUserId() || getSupabaseOwnerUserId();
     if (!userId) {
-        return events.filter((event) => event && event.id);
+        return [];
     }
 
     return events.filter((event) => event && event.id && String(event.ownerUserId || '') === userId);
@@ -1120,6 +1121,32 @@ function saveEvent(event) {
     writeStorage(TOKA_STORAGE_KEYS.events, events);
     upsertEventCloud(eventWithOwner);
     return eventWithOwner;
+}
+
+function clearCachedCloudData() {
+    writeStorage(TOKA_STORAGE_KEYS.events, []);
+    writeStorage(TOKA_STORAGE_KEYS.tickets, []);
+    writeStorage(TOKA_STORAGE_KEYS.calendarEntries, []);
+    writeStorage(TOKA_STORAGE_KEYS.eventMetrics, {});
+    setPendingEventSyncIds([]);
+    setDeletedEventIds([]);
+    setEventsSyncCursor('');
+
+    try {
+        const removableKeys = [];
+        for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index);
+            if (!key) {
+                continue;
+            }
+            if (key.startsWith('toka_comments_') || key.startsWith('toka_updates_')) {
+                removableKeys.push(key);
+            }
+        }
+        removableKeys.forEach((key) => localStorage.removeItem(key));
+    } catch (error) {
+        // no-op if localStorage is unavailable
+    }
 }
 
 function deleteEventCloud(eventId) {
@@ -1145,6 +1172,15 @@ function deleteEventCloud(eventId) {
             } catch (error) {
                 reportSupabaseError('delete.events.refresh', error);
             }
+            return;
+        }
+
+        const rpcMessage = String(rpcError.message || rpcError.details || rpcError.hint || '').toLowerCase();
+        const rpcUnavailable = rpcMessage.includes('does not exist') ||
+            rpcMessage.includes('could not find the function') ||
+            rpcMessage.includes('schema cache');
+        if (!rpcUnavailable) {
+            reportSupabaseError('delete.events.rpc', rpcError);
             return;
         }
 
@@ -1184,6 +1220,16 @@ function deleteSavedEvent(eventId) {
     }
 
     const previousEvents = getSavedEvents();
+    const userId = getCurrentAuthUserId() || getSupabaseOwnerUserId();
+    const existingEvent = previousEvents.find((event) => event && event.id === eventId);
+    if (existingEvent && userId) {
+        const eventOwner = String(existingEvent.ownerUserId || '').trim();
+        if (eventOwner && eventOwner !== userId) {
+            reportSupabaseError('delete.events.auth', new Error('Not authorized to delete this event.'));
+            return false;
+        }
+    }
+
     const nextEvents = previousEvents.filter((event) => event && event.id !== eventId);
     writeStorage(TOKA_STORAGE_KEYS.events, nextEvents);
 

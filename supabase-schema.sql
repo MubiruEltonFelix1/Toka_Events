@@ -568,6 +568,7 @@ as $$
 declare
     caller_id uuid := auth.uid();
     owns_event boolean := false;
+    has_other_owner_rows boolean := false;
 begin
     if p_event_id is null or btrim(p_event_id) = '' then
         raise exception 'Event id is required';
@@ -586,6 +587,17 @@ begin
 
     if not owns_event then
         raise exception 'Not authorized to delete this event';
+    end if;
+
+    select exists (
+        select 1
+        from public.toka_events e
+        where e.id = p_event_id
+          and coalesce(e.owner_user_id, '00000000-0000-0000-0000-000000000000'::uuid) <> caller_id
+    ) into has_other_owner_rows;
+
+    if has_other_owner_rows then
+        raise exception 'Event ownership conflict detected. Contact support to resolve duplicate ownership rows.';
     end if;
 
     delete from public.toka_tickets where event_id = p_event_id;

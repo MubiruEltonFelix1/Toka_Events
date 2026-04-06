@@ -288,7 +288,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-15`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-17`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -1843,7 +1843,11 @@ function submitRegistration(event) {
     registered: Number(event.registered || 0) + 1,
     attendees: Array.isArray(event.attendees) ? [...event.attendees, fullName] : [fullName]
   };
-  saveEvent(updatedEvent);
+  const currentUserId = String((TOKA_AUTH_STATE && TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id) || '').trim();
+  const eventOwnerUserId = String((event && event.ownerUserId) || '').trim();
+  if (currentUserId && eventOwnerUserId && currentUserId === eventOwnerUserId) {
+    saveEvent(updatedEvent);
+  }
 
   renderHome();
   renderDiscover();
@@ -2101,6 +2105,9 @@ async function logoutUser() {
   }
   if (typeof window.stopSupabaseAutoSync === 'function') {
     window.stopSupabaseAutoSync();
+  }
+  if (typeof window.clearCachedCloudData === 'function') {
+    window.clearCachedCloudData();
   }
 
   TOKA_AUTH_STATE.session = null;
