@@ -417,6 +417,216 @@ input[type="radio"] {
     gap: 16px;
 }
 
+.host-admin-shell {
+    display: grid;
+    gap: 16px;
+}
+
+.host-admin-sidebar {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 18px;
+    display: grid;
+    gap: 16px;
+    align-content: start;
+}
+
+.host-admin-brand h3 {
+    margin: 4px 0 0;
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: 0.02em;
+}
+
+.host-admin-nav {
+    display: grid;
+    gap: 8px;
+}
+
+.host-admin-nav-item {
+    width: 100%;
+    text-align: left;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px 12px;
+    color: #f3f3f3;
+    background: rgba(255, 255, 255, 0.02);
+    transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.host-admin-nav-item:hover {
+    transform: translateY(-1px);
+    border-color: rgba(244, 80, 10, 0.5);
+    background: rgba(244, 80, 10, 0.12);
+}
+
+.host-admin-nav-item.active {
+    border-color: rgba(244, 80, 10, 0.85);
+    background: linear-gradient(135deg, rgba(244, 80, 10, 0.22), rgba(247, 183, 49, 0.14));
+    color: #fff7ed;
+}
+
+.host-admin-side-actions {
+    display: grid;
+    gap: 8px;
+}
+
+.host-admin-main {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+}
+
+.host-admin-header {
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 16px;
+    background: linear-gradient(170deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.host-admin-header h2 {
+    margin: 4px 0 0;
+    font-size: 1.35rem;
+}
+
+.host-overview-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.host-kpi-card {
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.02);
+    display: grid;
+    gap: 4px;
+}
+
+.host-kpi-card p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.host-kpi-card strong {
+    font-size: 1.2rem;
+    color: #fff7ed;
+}
+
+.host-panel {
+    display: grid;
+    gap: 10px;
+}
+
+.host-panel-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: baseline;
+}
+
+.host-panel-head h3 {
+    margin: 0;
+}
+
+.host-panel-head p {
+    margin: 0;
+}
+
+.host-table-wrap {
+    overflow: auto;
+}
+
+.host-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 620px;
+}
+
+.host-table th,
+.host-table td {
+    text-align: left;
+    padding: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.88rem;
+}
+
+.host-table th {
+    color: #d8d8d8;
+    font-weight: 600;
+}
+
+.host-event-grid,
+.host-analytics-grid,
+.host-audience-stack {
+    display: grid;
+    gap: 12px;
+}
+
+.host-event-card,
+.host-analytics-card,
+.host-audience-card {
+    display: grid;
+    gap: 12px;
+}
+
+.host-event-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.host-event-thumb {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 12px;
+    flex: 0 0 auto;
+}
+
+.host-event-thumb.fallback {
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 1.8rem;
+}
+
+.host-event-top h3 {
+    margin: 0;
+}
+
+.host-event-top p {
+    margin: 2px 0 0;
+}
+
+.host-event-stats,
+.host-audience-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.host-event-stats span,
+.host-audience-grid span {
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 10px;
+    font-size: 0.84rem;
+    color: #dfdfdf;
+}
+
+.host-event-stats strong,
+.host-audience-grid strong {
+    color: #fff;
+}
+
 .dashboard-card {
     display: grid;
     gap: 14px;
@@ -1885,6 +2095,21 @@ textarea {
     }
     .dashboard-summary-grid {
         grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    .host-admin-shell {
+        grid-template-columns: 260px minmax(0, 1fr);
+        align-items: start;
+    }
+    .host-admin-sidebar {
+        position: sticky;
+        top: 88px;
+    }
+    .host-overview-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    .host-event-grid,
+    .host-analytics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .hero-card {
         min-height: 78vh;

@@ -56,7 +56,7 @@
     <link rel="icon" href="favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest?v=20260405-1" />
-    <link rel="stylesheet" href="style.css?v=20260405-3" />
+    <link rel="stylesheet" href="style.css?v=20260406-1" />
 
     <!-- JSON-LD Structured Data for SEO -->
     <script type="application/ld+json">
@@ -650,17 +650,41 @@
         </div>
 
         <div class="screen" id="screen-host-dashboard">
-            <div class="container host-dashboard-layout">
-                <div class="topbar">
-                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-host')">← Host</button>
-                    <h2>Host Dashboard</h2>
-                    <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-home')">Home</button>
-                </div>
-                <div id="host-dashboard-guard" class="card hidden">
-                    <h3>Host access only</h3>
-                    <p class="text-muted">Publish at least one event from this profile to unlock dashboard analytics.</p>
-                </div>
-                <div id="host-dashboard-content" class="host-dashboard-content"></div>
+            <div class="container host-admin-shell" id="host-admin-shell">
+                <aside class="host-admin-sidebar" aria-label="Dashboard navigation">
+                    <div class="host-admin-brand">
+                        <p class="eyebrow">Organiser Console</p>
+                        <h3>Toka Host</h3>
+                    </div>
+                    <nav class="host-admin-nav" id="host-admin-nav">
+                        <button type="button" class="host-admin-nav-item" data-host-route="dashboard">Overview</button>
+                        <button type="button" class="host-admin-nav-item" data-host-route="events">Events</button>
+                        <button type="button" class="host-admin-nav-item" data-host-route="analytics">Analytics</button>
+                        <button type="button" class="host-admin-nav-item" data-host-route="audience">Audience</button>
+                    </nav>
+                    <div class="host-admin-side-actions">
+                        <button type="button" class="button button-secondary button-small" onclick="showScreen('screen-host')">Create Event</button>
+                        <button type="button" class="button button-ghost button-small" onclick="showScreen('screen-home')">Back Home</button>
+                    </div>
+                </aside>
+
+                <main class="host-admin-main">
+                    <header class="host-admin-header">
+                        <div>
+                            <p class="eyebrow" id="host-dashboard-route-label">Overview</p>
+                            <h2 id="host-dashboard-title">Host Dashboard</h2>
+                        </div>
+                        <button type="button" class="button button-primary button-small" onclick="showScreen('screen-host')">+ New Event</button>
+                    </header>
+
+                    <div id="host-dashboard-guard" class="card hidden">
+                        <h3>Host access only</h3>
+                        <p class="text-muted">Publish at least one event from this profile to unlock dashboard analytics.</p>
+                        <button type="button" class="button button-primary" onclick="showScreen('screen-host')">Create Event</button>
+                    </div>
+
+                    <section id="host-dashboard-content" class="host-dashboard-content"></section>
+                </main>
             </div>
         </div>
 
@@ -770,8 +794,9 @@
     <script src="vendor/qrcode.min.js?v=20260405-1"></script>
     <script src="supabase-config.js?v=20260405-3"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="data.js?v=20260405-3"></script>
-    <script src="app.js?v=20260405-3"></script>
+    <script src="data.js?v=20260406-1"></script>
+    <script src="app.js?v=20260406-1"></script>
+    <script src="host-dashboard-controller.js?v=20260406-1"></script>
 </body>
 
 </html>

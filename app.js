@@ -21,7 +21,8 @@ const TOKA_APP_STATE = {
     isPublishingHostEvent: false,
     lastPublishedFingerprint: '',
     lastPublishedAt: 0,
-    postOnboardingScreen: ''
+    postOnboardingScreen: '',
+    hostDashboardRoute: 'dashboard'
 };
 
 const TOKA_PWA_STATE = {
@@ -222,7 +223,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-        await navigator.serviceWorker.register(`${basePath}sw.js?v=20260405-1`, { scope: basePath });
+        await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-1`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -750,7 +751,15 @@ function syncHashWithScreen(screenId) {
         'screen-host': '#/host',
         'screen-host-dashboard': '#/host/dashboard'
     };
-    const nextHash = mapping[screenId];
+    let nextHash = mapping[screenId];
+    if (screenId === 'screen-host-dashboard') {
+        const currentHash = (window.location.hash || '').toLowerCase();
+        if (currentHash.startsWith('#/host/') && currentHash !== '#/host/') {
+            nextHash = currentHash;
+        } else {
+            nextHash = '#/host/dashboard';
+        }
+    }
     if (!nextHash || window.location.hash === nextHash) {
         return;
     }
@@ -759,6 +768,10 @@ function syncHashWithScreen(screenId) {
 
 function resolveScreenFromHash() {
     const hash = (window.location.hash || '').toLowerCase();
+    if (hash.startsWith('#/host/')) {
+        TOKA_APP_STATE.hostDashboardRoute = hash.replace('#/host/', '').split('?')[0] || 'dashboard';
+        return 'screen-host-dashboard';
+    }
     if (hash === '#/host/dashboard') return 'screen-host-dashboard';
     if (hash === '#/calendar') return 'screen-calendar';
     if (hash === '#/discover') return 'screen-discover';
@@ -2323,6 +2336,8 @@ function clearHostThumbnail() {
 }
 
 function openHostDashboard() {
+  TOKA_APP_STATE.hostDashboardRoute = 'dashboard';
+  window.location.hash = '#/host/dashboard';
   showScreen('screen-host-dashboard');
 }
 
@@ -2375,6 +2390,11 @@ function getEventStatusBadge(event) {
 }
 
 function renderHostDashboard() {
+  if (window.TokaHostDashboardController && typeof window.TokaHostDashboardController.render === 'function') {
+    window.TokaHostDashboardController.render();
+    return;
+  }
+
   const guard = qs('#host-dashboard-guard');
   const content = qs('#host-dashboard-content');
   if (!guard || !content) {

@@ -1,11 +1,12 @@
-const TOKA_CACHE_VERSION = 'toka-shell-v1';
+const TOKA_CACHE_VERSION = 'toka-shell-v2';
 const TOKA_CACHE_ASSETS = [
     './',
     './index.html',
-    './style.css?v=20260405-3',
+    './style.css?v=20260406-1',
     './supabase-config.js?v=20260405-3',
-    './data.js?v=20260405-3',
-    './app.js?v=20260405-3',
+    './data.js?v=20260406-1',
+    './app.js?v=20260406-1',
+    './host-dashboard-controller.js?v=20260406-1',
     './manifest.webmanifest?v=20260405-1',
     './vendor/qrcode.min.js?v=20260405-1',
     './favicon.ico',
