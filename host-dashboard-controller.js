@@ -21,6 +21,121 @@
             return {};
         }
 
+        function daysUntilEvent(dateString) {
+          const eventDate = new Date(`${dateString}T12:00:00`);
+          if (Number.isNaN(eventDate.getTime())) {
+            return 999;
+          }
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          return Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
+        }
+
+        function getEventHealthAlerts(events) {
+          const alerts = [];
+
+          events.forEach((event) => {
+            const metric = getMetricSafe(event.id);
+            const impressions = Number(metric.impressions || 0);
+            const sold = Number(metric.ticketSalesCount || 0);
+            const capacity = Number(event.capacity || 0);
+            const registered = Number(event.registered || 0);
+            const conversion = impressions > 0 ? (sold / impressions) * 100 : 0;
+            const fillRate = capacity > 0 ? (registered / capacity) * 100 : 0;
+            const daysLeft = daysUntilEvent(event.date);
+
+            if (impressions >= 120 && conversion < 1.2) {
+              alerts.push({
+                severity: 'high',
+                message: `${event.name}: low conversion (${conversion.toFixed(1)}%). Consider pricing or copy updates.`
+              });
+            }
+
+            if (daysLeft <= 7 && daysLeft >= 0 && fillRate < 35) {
+              alerts.push({
+                severity: 'medium',
+                message: `${event.name}: event is ${daysLeft}d away with only ${fillRate.toFixed(1)}% capacity filled.`
+              });
+            }
+
+            if (fillRate >= 85 && daysLeft > 0) {
+              alerts.push({
+                severity: 'low',
+                message: `${event.name}: strong demand (${fillRate.toFixed(1)}% filled). Consider opening more inventory.`
+              });
+            }
+          });
+
+          return alerts.slice(0, 6);
+        }
+
+        function getFinanceSnapshot(events) {
+          const totals = events.reduce((acc, event) => {
+            const metric = getMetricSafe(event.id);
+            const revenue = Number(metric.ticketRevenueTotal || 0);
+            const eventDaysLeft = daysUntilEvent(event.date);
+            acc.gross += revenue;
+            if (eventDaysLeft > 0) {
+              acc.pending += revenue;
+            }
+            if (eventDaysLeft <= 0) {
+              acc.completed += revenue;
+            }
+            return acc;
+          }, { gross: 0, pending: 0, completed: 0 });
+
+          const estimatedFees = totals.gross * 0.08;
+          const estimatedNet = totals.gross - estimatedFees;
+          return {
+            gross: totals.gross,
+            pending: totals.pending,
+            completed: totals.completed,
+            estimatedFees,
+            estimatedNet
+          };
+        }
+
+        function toCsvCell(value) {
+          const text = String(value == null ? '' : value);
+          const escaped = text.replace(/"/g, '""');
+          return `"${escaped}"`;
+        }
+
+        function buildEventsCsv(events) {
+          const header = [
+            'Event Name',
+            'Date',
+            'City',
+            'Capacity',
+            'Registered',
+            'Tickets Sold',
+            'Impressions',
+            'Conversion %',
+            'Revenue'
+          ];
+
+          const rows = events.map((event) => {
+            const metric = getMetricSafe(event.id);
+            const impressions = Number(metric.impressions || 0);
+            const sold = Number(metric.ticketSalesCount || 0);
+            const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(2) : '0.00';
+            return [
+              event.name || 'Untitled',
+              event.date || '',
+              event.city || '',
+              Number(event.capacity || 0),
+              Number(event.registered || 0),
+              sold,
+              impressions,
+              conversion,
+              Number(metric.ticketRevenueTotal || 0)
+            ];
+          });
+
+          const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(','));
+          return csvLines.join('\n');
+        }
+
         function renderMetricCards(events) {
             const totals = events.reduce((acc, event) => {
                 const metric = getMetricSafe(event.id);
@@ -44,6 +159,8 @@
         }
 
         function renderOverview(events) {
+          const finance = getFinanceSnapshot(events);
+          const alerts = getEventHealthAlerts(events);
             const rows = events.slice(0, 6).map((event) => {
                 const status = typeof getEventStatusBadge === 'function' ? getEventStatusBadge(event) : { label: 'Upcoming', className: 'is-upcoming' };
                 const metric = getMetricSafe(event.id);
@@ -61,6 +178,43 @@
 
             return `
       ${renderMetricCards(events)}
+              <section class="host-toolbar card" aria-label="Dashboard quick actions">
+                <div class="host-toolbar-actions">
+                  <button type="button" class="button button-secondary button-small" onclick="TokaHostDashboardController.exportCsv()">Export CSV</button>
+                  <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.navigate('analytics')">Open Analytics</button>
+                </div>
+              </section>
+              <section class="host-finance-grid" aria-label="Finance snapshot">
+                <article class="host-finance-card card">
+                  <p class="eyebrow">Gross Revenue</p>
+                  <h3>${typeof formatPrice === 'function' ? formatPrice(finance.gross, 'UGX') : finance.gross}</h3>
+                  <p class="text-muted">Across all hosted events</p>
+                </article>
+                <article class="host-finance-card card">
+                  <p class="eyebrow">Estimated Net</p>
+                  <h3>${typeof formatPrice === 'function' ? formatPrice(finance.estimatedNet, 'UGX') : finance.estimatedNet}</h3>
+                  <p class="text-muted">After estimated platform fees (8%)</p>
+                </article>
+                <article class="host-finance-card card">
+                  <p class="eyebrow">Pending Payout</p>
+                  <h3>${typeof formatPrice === 'function' ? formatPrice(finance.pending, 'UGX') : finance.pending}</h3>
+                  <p class="text-muted">Revenue from upcoming events</p>
+                </article>
+              </section>
+              <section class="host-alerts card" aria-label="Event health alerts">
+                <div class="host-panel-head">
+                  <h3>Event Health Alerts</h3>
+                  <p class="text-muted">Auto-detected risks and opportunities</p>
+                </div>
+                <div class="host-alerts-list">
+                  ${alerts.length ? alerts.map((alert) => `
+                    <article class="host-alert-item ${escapeHtml(alert.severity)}">
+                      <span class="host-alert-dot" aria-hidden="true"></span>
+                      <p>${escapeHtml(alert.message)}</p>
+                    </article>
+                  `).join('') : '<p class="text-muted">No urgent alerts. Your events look healthy right now.</p>'}
+                </div>
+              </section>
       <section class="host-panel card">
         <div class="host-panel-head">
           <h3>Latest Event Performance</h3>
@@ -287,6 +441,33 @@
     }
   }
 
+  function exportCsv() {
+    const hosted = getHostedEventsSafe();
+    if (!hosted.length) {
+      if (typeof toast === 'function') {
+        toast('No hosted events to export yet.');
+      }
+      return;
+    }
+
+    const csv = buildEventsCsv(hosted);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `toka-host-report-${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    if (typeof toast === 'function') {
+      toast('Host report CSV downloaded.');
+    }
+  }
+
   function bindNav() {
     const nav = document.querySelector('#host-admin-nav');
     if (!nav || nav.dataset.bound === '1') {
@@ -308,7 +489,8 @@
   window.TokaHostDashboardController = {
     render,
     navigate,
-    bindNav
+    bindNav,
+    exportCsv
   };
 
   if (typeof TOKA_APP_STATE === 'object' && TOKA_APP_STATE.currentScreen === 'screen-host-dashboard') {
