@@ -22,8 +22,11 @@
         }
 
         function getTicketsSafe() {
-            if (typeof getTickets === 'function') {
-                return getTickets();
+          if (typeof getHostAudienceTickets === 'function') {
+            return getHostAudienceTickets();
+          }
+          if (typeof getTickets === 'function') {
+            return getTickets();
             }
             return [];
         }

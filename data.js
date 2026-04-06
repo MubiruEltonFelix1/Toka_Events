@@ -4,6 +4,7 @@ const TOKA_STORAGE_KEYS = {
     onboardingComplete: 'toka_onboarding_complete',
     userProfile: 'toka_user_profile',
     tickets: 'toka_tickets',
+    hostAudienceTickets: 'toka_host_audience_tickets',
     events: 'toka_events',
     publicEvents: 'toka_public_events',
     referralCode: 'toka_referral_code',
@@ -323,6 +324,69 @@ async function supabaseSelectPublicEvents(sinceTimestamp = '') {
     return data;
 }
 
+async function supabaseSelectHostAudienceTickets() {
+    const client = getSupabaseClient();
+    if (!client) {
+        return [];
+    }
+
+    const { data, error } = await client
+        .from(TOKA_SUPABASE_TABLES.tickets)
+        .select('*')
+        .order('updated_at', { ascending: true });
+
+    if (error || !Array.isArray(data)) {
+        if (error) {
+            reportSupabaseError('select.hostAudienceTickets', error);
+        }
+        return [];
+    }
+
+    return data;
+}
+
+function mergeProfilePayload(localProfile, remotePayload) {
+    const payload = remotePayload && typeof remotePayload === 'object' ? remotePayload : {};
+    const authStateUser = window.TOKA_AUTH_STATE && window.TOKA_AUTH_STATE.user ? window.TOKA_AUTH_STATE.user : null;
+    const authMeta = authStateUser && authStateUser.user_metadata && typeof authStateUser.user_metadata === 'object' ? authStateUser.user_metadata : {};
+
+    const chooseText = (...values) => {
+        for (const value of values) {
+            const next = String(value == null ? '' : value).trim();
+            if (next) {
+                return next;
+            }
+        }
+        return '';
+    };
+
+    const chooseBoolean = (...values) => {
+        for (const value of values) {
+            if (typeof value === 'boolean') {
+                return value;
+            }
+        }
+        return true;
+    };
+
+    const localInterests = Array.isArray(localProfile.interests) ? localProfile.interests : [];
+    const remoteInterests = Array.isArray(payload.interests) ? payload.interests : [];
+
+    return {
+        ...localProfile,
+        ...payload,
+        name: chooseText(payload.name, localProfile.name, authMeta.full_name),
+        gender: chooseText(payload.gender, localProfile.gender, authMeta.gender),
+        phone: chooseText(payload.phone, localProfile.phone, authMeta.phone),
+        phoneCountryCode: chooseText(payload.phoneCountryCode, localProfile.phoneCountryCode, authMeta.phone_country_code),
+        phoneNationalNumber: chooseText(payload.phoneNationalNumber, localProfile.phoneNationalNumber, authMeta.phone_national_number),
+        email: chooseText(payload.email, localProfile.email, authStateUser && authStateUser.email, authMeta.email),
+        language: chooseText(payload.language, localProfile.language) || 'English',
+        notificationsEnabled: chooseBoolean(payload.notificationsEnabled, localProfile.notificationsEnabled),
+        interests: remoteInterests.length ? remoteInterests : localInterests
+    };
+}
+
 function getRowUpdatedAt(row) {
     if (!row || !row.updated_at) {
         return 0;
@@ -569,7 +633,7 @@ async function pullSupabaseIntoLocalStorage() {
     const remoteProfile = pickLatestRow(profileRows);
     if (remoteProfile && remoteProfile.payload) {
         const localProfile = getUserProfile();
-        writeStorage(TOKA_STORAGE_KEYS.userProfile, {...localProfile, ...remoteProfile.payload });
+        writeStorage(TOKA_STORAGE_KEYS.userProfile, mergeProfilePayload(localProfile, remoteProfile.payload));
         setOnboardingComplete(Boolean(remoteProfile.onboarding_complete));
         if (remoteProfile.referral_code) {
             setReferralCode(remoteProfile.referral_code);
@@ -804,6 +868,31 @@ async function syncPublicEventsFromCloud(options = {}) {
     return true;
 }
 
+function getHostAudienceTickets() {
+    const tickets = readStorage(TOKA_STORAGE_KEYS.hostAudienceTickets, []);
+    return Array.isArray(tickets) ? tickets : [];
+}
+
+async function syncHostAudienceTicketsFromCloud() {
+    const ownerUserId = await ensureSupabaseAuth();
+    if (!ownerUserId) {
+        writeStorage(TOKA_STORAGE_KEYS.hostAudienceTickets, []);
+        return false;
+    }
+
+    const ticketRows = await supabaseSelectHostAudienceTickets();
+    const remoteTickets = pickLatestRowsByKey(ticketRows, 'id').map((row) => row.payload).filter(Boolean);
+    const previous = getHostAudienceTickets();
+    const merged = mergeById(previous, remoteTickets);
+
+    if (JSON.stringify(previous) !== JSON.stringify(merged)) {
+        writeStorage(TOKA_STORAGE_KEYS.hostAudienceTickets, merged);
+        notifyCloudEventsUpdated();
+    }
+
+    return true;
+}
+
 function stopSupabaseAutoSync() {
     if (TOKA_SUPABASE_SYNC_INTERVAL_ID) {
         clearInterval(TOKA_SUPABASE_SYNC_INTERVAL_ID);
@@ -888,6 +977,9 @@ function startSupabaseAutoSync() {
         syncPublicEventsFromCloud({ fullRefresh: true }).catch((error) => {
             reportSupabaseError('autoSync.publicEvents', error);
         });
+        syncHostAudienceTicketsFromCloud().catch((error) => {
+            reportSupabaseError('autoSync.hostAudienceTickets', error);
+        });
     }, TOKA_SUPABASE_SYNC_INTERVAL_MS);
 }
 
@@ -927,6 +1019,7 @@ async function initializeSupabaseSync() {
     await flushPendingEventSyncQueue();
     await syncSharedEventsFromCloud({ fullRefresh: true });
     await syncPublicEventsFromCloud({ fullRefresh: true });
+    await syncHostAudienceTicketsFromCloud();
     pushLocalSnapshotToSupabase();
     startSupabaseAutoSync();
     notifyCloudEventsUpdated();
@@ -979,6 +1072,7 @@ window.debugSupabaseConnection = debugSupabaseConnection;
 window.setSupabaseOwnerUserId = setSupabaseOwnerUserId;
 window.syncSharedEventsFromCloud = syncSharedEventsFromCloud;
 window.syncPublicEventsFromCloud = syncPublicEventsFromCloud;
+window.getHostAudienceTickets = getHostAudienceTickets;
 window.startSupabaseAutoSync = startSupabaseAutoSync;
 window.stopSupabaseAutoSync = stopSupabaseAutoSync;
 window.deleteSavedEvent = deleteSavedEvent;
@@ -1308,6 +1402,7 @@ function clearCachedCloudData(options = {}) {
         writeStorage(TOKA_STORAGE_KEYS.publicEventsSyncCursor, '');
     }
     writeStorage(TOKA_STORAGE_KEYS.tickets, []);
+    writeStorage(TOKA_STORAGE_KEYS.hostAudienceTickets, []);
     writeStorage(TOKA_STORAGE_KEYS.calendarEntries, []);
     writeStorage(TOKA_STORAGE_KEYS.eventMetrics, {});
     setPendingEventSyncIds([]);

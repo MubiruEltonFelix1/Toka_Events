@@ -292,7 +292,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-23`, { scope: basePath });
+      await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-24`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -1992,7 +1992,7 @@ function renderProfile() {
   if (name) name.textContent = profile.name || 'Your Profile';
   if (phone) phone.textContent = profile.phone || '+256 --- ----';
   if (stats) {
-    const hostedCount = getEvents().filter((event) => event.createdBy === 'user').length;
+    const hostedCount = getHostedEvents().length;
     stats.innerHTML = `
       <div class="stat-card"><strong>${getTickets().length}</strong><span>Events Attended</span></div>
       <div class="stat-card"><strong>${hostedCount}</strong><span>Events Hosted</span></div>

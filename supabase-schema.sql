@@ -819,6 +819,20 @@ begin
             with check (auth.uid() is not null and owner_user_id = auth.uid());
     end if;
 
+    if not exists (select 1 from pg_policies where policyname = 'toka_tickets_host_event_read') then
+        create policy toka_tickets_host_event_read on public.toka_tickets
+            for select
+            using (
+                auth.uid() is not null
+                and exists (
+                    select 1
+                    from public.toka_events e
+                    where e.id = toka_tickets.event_id
+                      and e.owner_user_id = auth.uid()
+                )
+            );
+    end if;
+
     if not exists (select 1 from pg_policies where policyname = 'toka_comments_owner_rw') then
         create policy toka_comments_owner_rw on public.toka_comments
             for all
