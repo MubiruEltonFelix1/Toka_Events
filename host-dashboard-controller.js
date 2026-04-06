@@ -577,6 +577,7 @@
           <div class="dashboard-actions">
             <button type="button" class="button button-secondary button-small" onclick="openEventDetail('${escapeHtml(event.id)}')">View Event</button>
             <button type="button" class="button button-ghost button-small" onclick="copyToClipboard('toka.app/e/${escapeHtml(event.id)}')">Copy Link</button>
+            <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.deleteEvent(decodeURIComponent('${encodeURIComponent(event.id)}'))">Delete</button>
           </div>
           ${renderTicketingControls(event)}
         </article>
@@ -987,6 +988,34 @@
     }
   }
 
+  function deleteEvent(eventId) {
+    const safeId = String(eventId || '').trim();
+    if (!safeId) {
+      return;
+    }
+
+    const hosted = getHostedEventsSafe();
+    const event = hosted.find((item) => String(item && item.id || '') === safeId);
+    const label = event && event.name ? event.name : 'this event';
+    const confirmed = window.confirm(`Delete ${label}? This removes the event and related local records.`);
+    if (!confirmed) {
+      return;
+    }
+
+    if (typeof window.deleteSavedEvent !== 'function') {
+      if (typeof toast === 'function') {
+        toast('Delete helper is unavailable. Please refresh and try again.');
+      }
+      return;
+    }
+
+    const deleted = window.deleteSavedEvent(safeId);
+    if (typeof toast === 'function') {
+      toast(deleted ? 'Event deleted.' : 'Event not found.');
+    }
+    render();
+  }
+
   function bindNav() {
     const nav = document.querySelector('#host-admin-nav');
     if (!nav || nav.dataset.bound === '1') {
@@ -1011,6 +1040,7 @@
     bindNav,
     exportCsv,
     exportFinanceCsv,
+    deleteEvent,
     saveTicketingConfig: (encodedEventId) => saveTicketingConfig(decodeURIComponent(encodedEventId)),
     updateRefundStatus
   };

@@ -696,7 +696,6 @@ function pushLocalSnapshotToSupabase() {
     }
 
     upsertProfileCloud();
-    getSavedEvents().forEach((event) => upsertEventCloud(event));
     getTickets().forEach((ticket) => upsertTicketCloud(ticket));
     getCalendarEntries().forEach((entry) => upsertCalendarEntryCloud(entry));
 
@@ -779,6 +778,7 @@ window.setSupabaseOwnerUserId = setSupabaseOwnerUserId;
 window.syncSharedEventsFromCloud = syncSharedEventsFromCloud;
 window.startSupabaseAutoSync = startSupabaseAutoSync;
 window.stopSupabaseAutoSync = stopSupabaseAutoSync;
+window.deleteSavedEvent = deleteSavedEvent;
 
 const TOKA_PUBLIC_HOLIDAYS = [
     { id: 'hol-2026-01-01', date: '2026-01-01', name: "New Year's Day", scope: 'National' },
@@ -1046,6 +1046,62 @@ function saveEvent(event) {
     writeStorage(TOKA_STORAGE_KEYS.events, events);
     upsertEventCloud(event);
     return event;
+}
+
+function deleteEventCloud(eventId) {
+    const client = getSupabaseClient();
+    if (!client || !eventId) {
+        return;
+    }
+
+    const ownerUserId = getSupabaseOwnerUserId();
+    if (!ownerUserId) {
+        return;
+    }
+
+    queueSupabaseWrite(async() => {
+        const { error } = await client
+            .from(TOKA_SUPABASE_TABLES.events)
+            .delete()
+            .eq('owner_user_id', ownerUserId)
+            .eq('id', eventId);
+
+        if (error) {
+            reportSupabaseError('delete.events', error);
+        }
+    });
+}
+
+function deleteSavedEvent(eventId) {
+    if (!eventId) {
+        return false;
+    }
+
+    const previousEvents = getSavedEvents();
+    const nextEvents = previousEvents.filter((event) => event && event.id !== eventId);
+    writeStorage(TOKA_STORAGE_KEYS.events, nextEvents);
+
+    const nextTickets = getTickets().filter((ticket) => ticket && ticket.eventId !== eventId);
+    writeStorage(TOKA_STORAGE_KEYS.tickets, nextTickets);
+
+    const nextCalendarEntries = getCalendarEntries().filter((entry) => entry && entry.eventId !== eventId);
+    writeStorage(TOKA_STORAGE_KEYS.calendarEntries, nextCalendarEntries);
+
+    const nextMetrics = { ...getEventMetrics() };
+    delete nextMetrics[eventId];
+    writeStorage(TOKA_STORAGE_KEYS.eventMetrics, nextMetrics);
+
+    try {
+        localStorage.removeItem('toka_comments_' + eventId);
+        localStorage.removeItem('toka_updates_' + eventId);
+    } catch (error) {
+        // no-op if localStorage is unavailable
+    }
+
+    clearPendingEventSync(eventId);
+    deleteEventCloud(eventId);
+    notifyCloudEventsUpdated();
+    return previousEvents.length !== nextEvents.length;
 }
 
 function getEvents() {
