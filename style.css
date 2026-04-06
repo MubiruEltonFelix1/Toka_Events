@@ -554,6 +554,80 @@ input[type="radio"] {
     margin: 0;
 }
 
+.host-ticketing {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.host-ticketing h4 {
+    margin: 0;
+    font-size: 0.98rem;
+}
+
+.host-ticket-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.host-ticket-grid label {
+    display: grid;
+    gap: 6px;
+    color: #d6d6d6;
+    font-size: 0.82rem;
+}
+
+.host-ticket-grid input {
+    background: rgba(13, 13, 13, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: #fff;
+    padding: 8px 10px;
+}
+
+.host-audience-summary {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.host-status-pill {
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.host-status-pill.pending,
+.host-status-pill.requested {
+    border-color: rgba(245, 158, 11, 0.55);
+    background: rgba(245, 158, 11, 0.12);
+    color: #fde68a;
+}
+
+.host-status-pill.approved,
+.host-status-pill.high-value,
+.host-status-pill.repeat {
+    border-color: rgba(34, 197, 94, 0.5);
+    background: rgba(34, 197, 94, 0.12);
+    color: #bbf7d0;
+}
+
+.host-status-pill.rejected,
+.host-status-pill.no-contact {
+    border-color: rgba(239, 68, 68, 0.55);
+    background: rgba(239, 68, 68, 0.12);
+    color: #fecaca;
+}
+
+.host-status-pill.first-timer {
+    border-color: rgba(56, 189, 248, 0.55);
+    background: rgba(56, 189, 248, 0.12);
+    color: #bae6fd;
+}
+
 .host-alerts {
     display: grid;
     gap: 12px;
@@ -981,6 +1055,12 @@ button:active,
 
 .auth-feedback.info {
     color: var(--text-muted);
+}
+
+.auth-phone-grid {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px;
 }
 
 .screen {
@@ -2198,12 +2278,18 @@ textarea {
     .host-overview-grid {
         grid-template-columns: repeat(5, minmax(0, 1fr));
     }
+    .host-audience-summary {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
     .host-finance-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     .host-event-grid,
     .host-analytics-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .host-ticket-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
     .hero-card {
         min-height: 78vh;

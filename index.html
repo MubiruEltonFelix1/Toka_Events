@@ -56,7 +56,7 @@
     <link rel="icon" href="favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest?v=20260405-1" />
-    <link rel="stylesheet" href="style.css?v=20260406-2" />
+    <link rel="stylesheet" href="style.css?v=20260406-4" />
 
     <!-- JSON-LD Structured Data for SEO -->
     <script type="application/ld+json">
@@ -770,6 +770,27 @@
                 <h2 id="auth-title">Welcome back to Toka</h2>
                 <p class="text-muted" id="auth-description">Sign in to access your tickets, profile, and hosting tools.</p>
                 <form id="auth-form" class="form-stack" novalidate>
+                    <div class="field-group auth-signup-only hidden">
+                        <label for="auth-full-name">Full Name</label>
+                        <input id="auth-full-name" type="text" autocomplete="name" placeholder="Your full name" />
+                    </div>
+                    <div class="field-group auth-signup-only hidden">
+                        <label for="auth-gender">Gender</label>
+                        <select id="auth-gender">
+                            <option value="">Select gender</option>
+                            <option value="Female">Female</option>
+                            <option value="Male">Male</option>
+                            <option value="Non-binary">Non-binary</option>
+                            <option value="Prefer not to say">Prefer not to say</option>
+                        </select>
+                    </div>
+                    <div class="field-group auth-signup-only hidden">
+                        <label>Phone Number</label>
+                        <div class="auth-phone-grid">
+                            <input id="auth-country-code" type="text" inputmode="numeric" placeholder="+256" maxlength="5" />
+                            <input id="auth-phone-local" type="tel" inputmode="numeric" placeholder="700000000" maxlength="12" />
+                        </div>
+                    </div>
                     <div class="field-group">
                         <label for="auth-email">Email</label>
                         <input id="auth-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required />
@@ -794,9 +815,9 @@
     <script src="vendor/qrcode.min.js?v=20260405-1"></script>
     <script src="supabase-config.js?v=20260405-3"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="data.js?v=20260406-1"></script>
-    <script src="app.js?v=20260406-2"></script>
-    <script src="host-dashboard-controller.js?v=20260406-2"></script>
+    <script src="data.js?v=20260406-4"></script>
+    <script src="app.js?v=20260406-4"></script>
+    <script src="host-dashboard-controller.js?v=20260406-3"></script>
 </body>
 
 </html>

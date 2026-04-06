@@ -818,6 +818,8 @@ const TOKA_INTEREST_OPTIONS = [
     'Community'
 ];
 
+const TOKA_INCLUDE_PLACEHOLDER_EVENTS = false;
+
 const MOCK_EVENTS = [{
         id: 'evt001',
         name: 'Kampala Jazz Night',
@@ -1049,12 +1051,18 @@ function saveEvent(event) {
 function getEvents() {
     const savedEvents = getSavedEvents();
     const mergedEvents = new Map();
+    const placeholderEventIds = new Set(MOCK_EVENTS.map((event) => event.id));
 
-    MOCK_EVENTS.forEach((event) => {
-        mergedEvents.set(event.id, {...event });
-    });
+    if (TOKA_INCLUDE_PLACEHOLDER_EVENTS) {
+        MOCK_EVENTS.forEach((event) => {
+            mergedEvents.set(event.id, {...event });
+        });
+    }
 
     savedEvents.forEach((event) => {
+        if (!TOKA_INCLUDE_PLACEHOLDER_EVENTS && placeholderEventIds.has(event.id) && event.createdBy !== 'user') {
+            return;
+        }
         mergedEvents.set(event.id, {...mergedEvents.get(event.id), ...event });
     });
 
@@ -1064,7 +1072,10 @@ function getEvents() {
 function getUserProfile() {
     return readStorage(TOKA_STORAGE_KEYS.userProfile, {
         name: '',
+        gender: '',
         phone: '',
+        phoneCountryCode: '',
+        phoneNationalNumber: '',
         email: '',
         interests: [],
         notificationsEnabled: true,

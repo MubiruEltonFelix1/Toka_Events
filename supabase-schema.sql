@@ -14,7 +14,10 @@ create table if not exists public.toka_profiles (
     updated_at timestamptz not null default now(),
     -- Typed columns for analytics/ML features.
     name text,
+    gender text,
     phone text,
+    phone_country_code text,
+    phone_national_number text,
     email text,
     language text,
     notifications_enabled boolean,
@@ -41,6 +44,9 @@ create table if not exists public.toka_events (
     price_amount numeric(14, 2),
     currency text,
     capacity integer,
+    inventory_reserve_percent numeric(5, 2),
+    ticket_tiers jsonb,
+    is_placeholder boolean,
     language text,
     tags text[],
     metadata jsonb,
@@ -56,9 +62,17 @@ create table if not exists public.toka_tickets (
     -- Typed columns.
     event_id text,
     attendee_name text,
+    attendee_gender text,
     attendee_phone text,
+    attendee_phone_country_code text,
+    attendee_phone_national_number text,
     attendee_email text,
     amount_paid numeric(14, 2),
+    refund_amount numeric(14, 2),
+    refund_status text,
+    refund_reason text,
+    refund_requested_at timestamptz,
+    refund_resolved_at timestamptz,
     payment_method text,
     purchased_at timestamptz,
     referral_code_used text,
@@ -123,7 +137,10 @@ create table if not exists public.toka_event_metrics (
 
 -- Idempotent alter statements in case tables existed before typed columns were added.
 alter table public.toka_profiles add column if not exists name text;
+alter table public.toka_profiles add column if not exists gender text;
 alter table public.toka_profiles add column if not exists phone text;
+alter table public.toka_profiles add column if not exists phone_country_code text;
+alter table public.toka_profiles add column if not exists phone_national_number text;
 alter table public.toka_profiles add column if not exists email text;
 alter table public.toka_profiles add column if not exists language text;
 alter table public.toka_profiles add column if not exists notifications_enabled boolean;
@@ -143,6 +160,9 @@ alter table public.toka_events add column if not exists ends_at timestamptz;
 alter table public.toka_events add column if not exists price_amount numeric(14, 2);
 alter table public.toka_events add column if not exists currency text;
 alter table public.toka_events add column if not exists capacity integer;
+alter table public.toka_events add column if not exists inventory_reserve_percent numeric(5, 2);
+alter table public.toka_events add column if not exists ticket_tiers jsonb;
+alter table public.toka_events add column if not exists is_placeholder boolean;
 alter table public.toka_events add column if not exists language text;
 alter table public.toka_events add column if not exists tags text[];
 alter table public.toka_events add column if not exists metadata jsonb;
@@ -150,9 +170,17 @@ alter table public.toka_events add column if not exists owner_user_id uuid;
 
 alter table public.toka_tickets add column if not exists event_id text;
 alter table public.toka_tickets add column if not exists attendee_name text;
+alter table public.toka_tickets add column if not exists attendee_gender text;
 alter table public.toka_tickets add column if not exists attendee_phone text;
+alter table public.toka_tickets add column if not exists attendee_phone_country_code text;
+alter table public.toka_tickets add column if not exists attendee_phone_national_number text;
 alter table public.toka_tickets add column if not exists attendee_email text;
 alter table public.toka_tickets add column if not exists amount_paid numeric(14, 2);
+alter table public.toka_tickets add column if not exists refund_amount numeric(14, 2);
+alter table public.toka_tickets add column if not exists refund_status text;
+alter table public.toka_tickets add column if not exists refund_reason text;
+alter table public.toka_tickets add column if not exists refund_requested_at timestamptz;
+alter table public.toka_tickets add column if not exists refund_resolved_at timestamptz;
 alter table public.toka_tickets add column if not exists payment_method text;
 alter table public.toka_tickets add column if not exists purchased_at timestamptz;
 alter table public.toka_tickets add column if not exists referral_code_used text;
@@ -287,7 +315,10 @@ language plpgsql
 as $$
 begin
     new.name := coalesce(new.payload ->> 'name', new.name);
+    new.gender := coalesce(new.payload ->> 'gender', new.gender);
     new.phone := coalesce(new.payload ->> 'phone', new.phone);
+    new.phone_country_code := coalesce(new.payload ->> 'phoneCountryCode', new.phone_country_code);
+    new.phone_national_number := coalesce(new.payload ->> 'phoneNationalNumber', new.phone_national_number);
     new.email := coalesce(new.payload ->> 'email', new.email);
     new.language := coalesce(new.payload ->> 'language', new.language);
     new.notifications_enabled := coalesce((new.payload ->> 'notificationsEnabled')::boolean, new.notifications_enabled);
@@ -320,6 +351,9 @@ begin
     new.price_amount := coalesce((new.payload ->> 'price')::numeric, new.price_amount);
     new.currency := coalesce(new.payload ->> 'currency', new.currency);
     new.capacity := coalesce((new.payload ->> 'capacity')::integer, new.capacity);
+    new.inventory_reserve_percent := coalesce((new.payload #>> '{metadata,ticketing,reservePercent}')::numeric, new.inventory_reserve_percent);
+    new.ticket_tiers := coalesce(new.payload #> '{metadata,ticketing,tiers}', new.ticket_tiers);
+    new.is_placeholder := coalesce((new.payload ->> 'isPlaceholder')::boolean, new.is_placeholder, false);
     new.language := coalesce(new.payload ->> 'language', new.language);
     new.metadata := coalesce(new.payload -> 'metadata', new.metadata, '{}'::jsonb);
     new.tags := case
@@ -339,10 +373,18 @@ language plpgsql
 as $$
 begin
     new.event_id := coalesce(new.payload ->> 'eventId', new.event_id);
-    new.attendee_name := coalesce(new.payload ->> 'name', new.attendee_name);
+    new.attendee_name := coalesce(new.payload ->> 'fullName', new.payload ->> 'name', new.attendee_name);
+    new.attendee_gender := coalesce(new.payload ->> 'gender', new.attendee_gender);
     new.attendee_phone := coalesce(new.payload ->> 'phone', new.attendee_phone);
+    new.attendee_phone_country_code := coalesce(new.payload ->> 'phoneCountryCode', new.attendee_phone_country_code);
+    new.attendee_phone_national_number := coalesce(new.payload ->> 'phoneNationalNumber', new.attendee_phone_national_number);
     new.attendee_email := coalesce(new.payload ->> 'email', new.attendee_email);
     new.amount_paid := coalesce((new.payload ->> 'amount')::numeric, (new.payload ->> 'price')::numeric, new.amount_paid);
+    new.refund_amount := coalesce((new.payload ->> 'refundAmount')::numeric, new.refund_amount);
+    new.refund_status := coalesce(new.payload ->> 'refundStatus', new.refund_status);
+    new.refund_reason := coalesce(new.payload ->> 'refundReason', new.refund_reason);
+    new.refund_requested_at := coalesce(public.toka_try_timestamptz(new.payload ->> 'refundRequestedAt'), new.refund_requested_at);
+    new.refund_resolved_at := coalesce(public.toka_try_timestamptz(new.payload ->> 'refundResolvedAt'), new.refund_resolved_at);
     new.payment_method := coalesce(new.payload ->> 'paymentMethod', new.payment_method);
     new.purchased_at := coalesce(public.toka_try_timestamptz(new.payload ->> 'createdAt'), new.purchased_at, now());
     new.referral_code_used := coalesce(new.payload ->> 'referralCodeUsed', new.referral_code_used);
@@ -481,7 +523,12 @@ before insert on public.toka_event_metrics
 for each row execute function public.toka_assign_owner_user_id();
 
 -- ML-oriented views.
-create or replace view public.toka_ml_event_features as
+-- Drop first so Postgres does not attempt in-place column rename/order changes
+-- when view definitions evolve.
+drop view if exists public.toka_ml_event_features;
+drop view if exists public.toka_ml_training_rows;
+
+create view public.toka_ml_event_features as
 select
     e.device_id,
     e.id as event_id,
@@ -500,6 +547,7 @@ select
     e.price_amount,
     e.currency,
     e.capacity,
+    coalesce(e.is_placeholder, false) as is_placeholder,
     e.language,
     e.tags,
     coalesce(m.impressions, 0) as impressions,
@@ -513,9 +561,10 @@ select
 from public.toka_events e
 left join public.toka_event_metrics m
     on m.device_id = e.device_id
-   and m.event_id = e.id;
+    and m.event_id = e.id
+where coalesce(e.is_placeholder, false) = false;
 
-create or replace view public.toka_ml_training_rows as
+create view public.toka_ml_training_rows as
 select
     e.device_id,
     e.id as event_id,
@@ -526,12 +575,16 @@ select
     e.starts_at,
     e.price_amount,
     e.capacity,
+    coalesce(e.is_placeholder, false) as is_placeholder,
     coalesce(m.impressions, 0) as impressions,
     coalesce(m.ticket_sales_count, 0) as ticket_sales_count,
     coalesce(m.ticket_revenue_total, 0) as ticket_revenue_total,
     coalesce(c.comment_count, 0) as comment_count,
     coalesce(c.avg_likes_per_comment, 0) as avg_likes_per_comment,
     coalesce(t.ticket_count, 0) as ticket_count,
+    coalesce(t.female_attendee_count, 0) as female_attendee_count,
+    coalesce(t.male_attendee_count, 0) as male_attendee_count,
+    coalesce(t.unknown_attendee_count, 0) as unknown_attendee_count,
     case
         when coalesce(m.ticket_sales_count, 0) >= 10 then 'high'
         when coalesce(m.ticket_sales_count, 0) between 3 and 9 then 'medium'
@@ -556,12 +609,16 @@ left join (
     select
         device_id,
         event_id,
-        count(*) as ticket_count
+        count(*) as ticket_count,
+        count(*) filter (where lower(coalesce(attendee_gender, '')) = 'female') as female_attendee_count,
+        count(*) filter (where lower(coalesce(attendee_gender, '')) = 'male') as male_attendee_count,
+        count(*) filter (where lower(coalesce(attendee_gender, '')) not in ('female', 'male')) as unknown_attendee_count
     from public.toka_tickets
     group by device_id, event_id
 ) t
     on t.device_id = e.device_id
-   and t.event_id = e.id;
+   and t.event_id = e.id
+where coalesce(e.is_placeholder, false) = false;
 
 create index if not exists idx_toka_comments_event on public.toka_comments (device_id, event_id);
 create index if not exists idx_toka_updates_event on public.toka_updates (device_id, event_id);
@@ -570,7 +627,13 @@ create index if not exists idx_toka_events_starts_at on public.toka_events (star
 create index if not exists idx_toka_events_tags_gin on public.toka_events using gin (tags);
 create index if not exists idx_toka_events_payload_gin on public.toka_events using gin (payload);
 create index if not exists idx_toka_tickets_event_id on public.toka_tickets (device_id, event_id);
+create index if not exists idx_toka_tickets_refund_status on public.toka_tickets (owner_user_id, refund_status);
+create index if not exists idx_toka_tickets_attendee_gender on public.toka_tickets (owner_user_id, attendee_gender);
+create index if not exists idx_toka_events_ticketing on public.toka_events (owner_user_id, inventory_reserve_percent);
+create index if not exists idx_toka_events_is_placeholder on public.toka_events (owner_user_id, is_placeholder);
 create index if not exists idx_toka_profiles_owner on public.toka_profiles (owner_user_id);
+create index if not exists idx_toka_profiles_gender on public.toka_profiles (owner_user_id, gender);
+create index if not exists idx_toka_profiles_phone on public.toka_profiles (owner_user_id, phone);
 create index if not exists idx_toka_events_owner on public.toka_events (owner_user_id);
 create index if not exists idx_toka_tickets_owner on public.toka_tickets (owner_user_id);
 create index if not exists idx_toka_comments_owner on public.toka_comments (owner_user_id);

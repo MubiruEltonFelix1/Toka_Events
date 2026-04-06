@@ -100,6 +100,71 @@ function getAvatarColor(name) {
     return TOKA_AVATAR_COLORS[hashString(String(name || 'Toka')) % TOKA_AVATAR_COLORS.length];
 }
 
+function normalizeCountryCode(rawValue) {
+  const digits = String(rawValue || '').replace(/[^0-9]/g, '');
+  if (!digits || digits.length < 1 || digits.length > 4) {
+    return '';
+  }
+  return `+${digits}`;
+}
+
+function normalizeLocalPhoneNumber(rawValue) {
+  const digits = String(rawValue || '').replace(/[^0-9]/g, '');
+  if (!digits || digits.length < 6 || digits.length > 12) {
+    return '';
+  }
+  return digits;
+}
+
+function buildE164Phone(countryCode, localDigits) {
+  const normalizedCountryCode = normalizeCountryCode(countryCode);
+  const normalizedLocal = normalizeLocalPhoneNumber(localDigits);
+  if (!normalizedCountryCode || !normalizedLocal) {
+    return { ok: false, error: 'Enter a valid country code and phone number.' };
+  }
+  const combinedDigits = `${normalizedCountryCode.slice(1)}${normalizedLocal}`;
+  if (combinedDigits.length < 8 || combinedDigits.length > 15) {
+    return { ok: false, error: 'Phone number must be between 8 and 15 digits including country code.' };
+  }
+  return {
+    ok: true,
+    e164: `+${combinedDigits}`,
+    countryCode: normalizedCountryCode,
+    localNumber: normalizedLocal
+  };
+}
+
+function parseE164Phone(phoneValue, fallbackCountryCode = '+256') {
+  const value = String(phoneValue || '').trim();
+  if (!value.startsWith('+')) {
+    const fallback = buildE164Phone(fallbackCountryCode, value);
+    return fallback.ok ? fallback : { ok: false, error: 'Phone number must include country code.' };
+  }
+
+  const digits = value.replace(/[^0-9]/g, '');
+  for (let ccLength = 1; ccLength <= 4; ccLength += 1) {
+    const country = digits.slice(0, ccLength);
+    const local = digits.slice(ccLength);
+    const parsed = buildE164Phone(`+${country}`, local);
+    if (parsed.ok) {
+      return parsed;
+    }
+  }
+
+  return { ok: false, error: 'Invalid international phone format.' };
+}
+
+function validateAndNormalizePhoneInput(rawValue, fallbackCountryCode = '+256') {
+  const input = String(rawValue || '').trim();
+  if (!input) {
+    return { ok: false, error: 'Phone number is required.' };
+  }
+  if (input.startsWith('+')) {
+    return parseE164Phone(input, fallbackCountryCode);
+  }
+  return buildE164Phone(fallbackCountryCode, input);
+}
+
 function isAuthenticatedUser() {
     return Boolean(TOKA_AUTH_STATE.isAuthenticated && TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id);
 }
@@ -223,7 +288,7 @@ async function registerServiceWorker() {
     try {
         const path = window.location.pathname || '/';
         const basePath = path.endsWith('/') ? path : path.slice(0, path.lastIndexOf('/') + 1);
-        await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-2`, { scope: basePath });
+        await navigator.serviceWorker.register(`${basePath}sw.js?v=20260406-4`, { scope: basePath });
     } catch (error) {
         console.warn('Service worker registration failed', error);
     }
@@ -281,6 +346,12 @@ function openAuthModal(mode = 'signin', message = '') {
     const toggleButton = qs('#auth-toggle-mode');
     const forgotButton = qs('#auth-forgot-password');
     const resendButton = qs('#auth-resend-confirmation');
+    const signupOnlyFields = qsa('.auth-signup-only');
+    const signupName = qs('#auth-full-name');
+    const signupGender = qs('#auth-gender');
+    const signupCountryCode = qs('#auth-country-code');
+    const signupPhoneLocal = qs('#auth-phone-local');
+    const profile = getUserProfile();
 
     TOKA_AUTH_STATE.authMode = mode === 'signup' ? 'signup' : 'signin';
 
@@ -306,6 +377,25 @@ function openAuthModal(mode = 'signin', message = '') {
     }
     if (resendButton) {
         resendButton.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
+    }
+    signupOnlyFields.forEach((field) => {
+      field.classList.toggle('hidden', TOKA_AUTH_STATE.authMode !== 'signup');
+    });
+
+    if (TOKA_AUTH_STATE.authMode === 'signup') {
+      const parsedPhone = parseE164Phone(profile.phone || '', profile.phoneCountryCode || '+256');
+      if (signupName && !signupName.value) {
+        signupName.value = profile.name || '';
+      }
+      if (signupGender && !signupGender.value) {
+        signupGender.value = profile.gender || '';
+      }
+      if (signupCountryCode && !signupCountryCode.value) {
+        signupCountryCode.value = parsedPhone.ok ? parsedPhone.countryCode : (profile.phoneCountryCode || '+256');
+      }
+      if (signupPhoneLocal && !signupPhoneLocal.value) {
+        signupPhoneLocal.value = parsedPhone.ok ? parsedPhone.localNumber : (profile.phoneNationalNumber || '');
+      }
     }
 
     if (modal) {
@@ -342,6 +432,10 @@ async function handleAuthSubmit(event) {
     const passwordInput = qs('#auth-password');
     const email = emailInput ? emailInput.value.trim() : '';
     const password = passwordInput ? passwordInput.value : '';
+    const fullName = qs('#auth-full-name') ? qs('#auth-full-name').value.trim() : '';
+    const gender = qs('#auth-gender') ? qs('#auth-gender').value.trim() : '';
+    const countryCode = qs('#auth-country-code') ? qs('#auth-country-code').value.trim() : '';
+    const phoneLocal = qs('#auth-phone-local') ? qs('#auth-phone-local').value.trim() : '';
 
     if (!client || !client.auth) {
         setAuthFeedback('Supabase auth is not configured in this browser session.');
@@ -361,10 +455,28 @@ async function handleAuthSubmit(event) {
 
     try {
         if (TOKA_AUTH_STATE.authMode === 'signup') {
+          if (!fullName || !gender) {
+            setAuthFeedback('Full name and gender are required for sign up.');
+            return;
+          }
+
+          const parsedPhone = buildE164Phone(countryCode, phoneLocal);
+          if (!parsedPhone.ok) {
+            setAuthFeedback(parsedPhone.error);
+            return;
+          }
+
             const { data, error } = await client.auth.signUp({
                 email,
                 password,
                 options: {
+              data: {
+                full_name: fullName,
+                gender,
+                phone: parsedPhone.e164,
+                phone_country_code: parsedPhone.countryCode,
+                phone_national_number: parsedPhone.localNumber
+              },
                     emailRedirectTo: getAuthRedirectUrl()
                 }
             });
@@ -379,6 +491,14 @@ async function handleAuthSubmit(event) {
             }
 
             setAuthFeedback('Check your email to confirm your account.', 'success');
+      saveUserProfile({
+        name: fullName,
+        gender,
+        phone: parsedPhone.e164,
+        phoneCountryCode: parsedPhone.countryCode,
+        phoneNationalNumber: parsedPhone.localNumber,
+        email
+      });
             if (passwordInput) {
                 passwordInput.value = '';
             }
@@ -1653,26 +1773,40 @@ function submitRegistration(event) {
   }
 
   const fullName = qs('#register-name')?.value.trim();
-  const phone = qs('#register-phone')?.value.trim();
+  const phoneRaw = qs('#register-phone')?.value.trim();
   const email = qs('#register-email')?.value.trim();
   const source = qs('#register-source')?.value || 'WhatsApp';
   const paymentMethod = qs('input[name="paymentMethod"]:checked')?.value || 'MTN Mobile Money';
-  const paymentPhone = qs('#payment-phone')?.value.trim();
+  const paymentPhoneRaw = qs('#payment-phone')?.value.trim();
   const agreed = qs('#register-terms')?.checked;
 
-  if (!fullName || !phone || !agreed) {
+  if (!fullName || !phoneRaw || !agreed) {
     toast('Please complete the required fields and accept the terms.');
     return;
   }
 
-  if (event.price > 0 && paymentMethod !== 'Free' && !paymentPhone) {
+  const normalizedPhone = validateAndNormalizePhoneInput(phoneRaw, getUserProfile().phoneCountryCode || '+256');
+  if (!normalizedPhone.ok) {
+    toast(normalizedPhone.error);
+    return;
+  }
+
+  const normalizedPaymentPhone = paymentPhoneRaw ? validateAndNormalizePhoneInput(paymentPhoneRaw, normalizedPhone.countryCode) : normalizedPhone;
+  if (!normalizedPaymentPhone.ok) {
+    toast('Payment phone is invalid. Include country code and valid digits.');
+    return;
+  }
+
+  if (event.price > 0 && paymentMethod !== 'Free' && !paymentPhoneRaw) {
     toast('Enter the number to charge.');
     return;
   }
 
   const profile = saveUserProfile({
     name: fullName,
-    phone,
+    phone: normalizedPhone.e164,
+    phoneCountryCode: normalizedPhone.countryCode,
+    phoneNationalNumber: normalizedPhone.localNumber,
     email,
     interests: getUserProfile().interests || []
   });
@@ -1687,11 +1821,14 @@ function submitRegistration(event) {
     eventSnapshot: { ...event },
     ticketCode: generateTicketCode(),
     fullName,
-    phone,
+    gender: profile.gender || '',
+    phone: normalizedPhone.e164,
+    phoneCountryCode: normalizedPhone.countryCode,
+    phoneNationalNumber: normalizedPhone.localNumber,
     email,
     source,
     paymentMethod,
-    paymentPhone: paymentPhone || phone,
+    paymentPhone: normalizedPaymentPhone.e164,
     createdAt: new Date().toISOString(),
     status: 'Confirmed',
     referralCode: getReferralCode() || generateReferralCode(fullName)
@@ -1807,6 +1944,10 @@ function renderProfile() {
         <span>Language</span>
         <span>${escapeHtml(profile.language || 'English')}</span>
       </div>
+      <div class="settings-item static-item">
+        <span>Gender</span>
+        <span>${escapeHtml(profile.gender || 'Not set')}</span>
+      </div>
       <button type="button" class="settings-item" onclick="shareTokaApp()"><span>Share Toka</span><span>↗</span></button>
       <button type="button" class="settings-item" onclick="aboutToka()"><span>About Toka</span><span>i</span></button>
       <button type="button" class="settings-item danger" onclick="logoutUser()"><span>Logout</span><span>⎋</span></button>
@@ -1848,7 +1989,23 @@ function editProfile() {
   if (email === null) {
     return;
   }
-  saveUserProfile({ name: name.trim(), phone: phone.trim(), email: email.trim() });
+  const gender = window.prompt('Update your gender', profile.gender || '');
+  if (gender === null) {
+    return;
+  }
+  const normalizedPhone = validateAndNormalizePhoneInput(phone.trim(), profile.phoneCountryCode || '+256');
+  if (!normalizedPhone.ok) {
+    toast(normalizedPhone.error);
+    return;
+  }
+  saveUserProfile({
+    name: name.trim(),
+    phone: normalizedPhone.e164,
+    phoneCountryCode: normalizedPhone.countryCode,
+    phoneNationalNumber: normalizedPhone.localNumber,
+    email: email.trim(),
+    gender: gender.trim()
+  });
   if (!getReferralCode() && name.trim()) {
     setReferralCode(generateReferralCode(name.trim()));
   }
@@ -2757,14 +2914,26 @@ function goOnboardingNext() {
   }
 
   const name = qs('#onboarding-name')?.value.trim();
-  const phone = qs('#onboarding-phone')?.value.trim();
+  const phoneRaw = qs('#onboarding-phone')?.value.trim();
   const profile = getUserProfile();
-  if (!name || !phone || !(profile.interests || []).length) {
+  if (!name || !phoneRaw || !(profile.interests || []).length) {
     toast('Add your name, phone, and at least one interest.');
     return;
   }
 
-  saveUserProfile({ name, phone, interests: profile.interests || [] });
+  const normalizedPhone = validateAndNormalizePhoneInput(phoneRaw, profile.phoneCountryCode || '+256');
+  if (!normalizedPhone.ok) {
+    toast(normalizedPhone.error);
+    return;
+  }
+
+  saveUserProfile({
+    name,
+    phone: normalizedPhone.e164,
+    phoneCountryCode: normalizedPhone.countryCode,
+    phoneNationalNumber: normalizedPhone.localNumber,
+    interests: profile.interests || []
+  });
   setOnboardingComplete(true);
   if (!getReferralCode()) {
     setReferralCode(generateReferralCode(name));

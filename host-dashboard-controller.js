@@ -1,153 +1,370 @@
 (function initHostDashboardController() {
-        function getRouteFromHash() {
-            const hash = String(window.location.hash || '').toLowerCase();
-            if (!hash.startsWith('#/host/')) {
-                return 'dashboard';
-            }
-            return hash.replace('#/host/', '').split('?')[0] || 'dashboard';
+  function getRouteFromHash() {
+    const hash = String(window.location.hash || '').toLowerCase();
+    if (!hash.startsWith('#/host/')) {
+      return 'dashboard';
+    }
+    return hash.replace('#/host/', '').split('?')[0] || 'dashboard';
+  }
+
+  function getHostedEventsSafe() {
+    if (typeof getHostedEvents === 'function') {
+      return getHostedEvents();
+    }
+    return [];
+  }
+
+  function getTicketsSafe() {
+    if (typeof getTickets === 'function') {
+      return getTickets();
+    }
+    return [];
+  }
+
+  function getMetricSafe(eventId) {
+    if (typeof getEventMetric === 'function') {
+      return getEventMetric(eventId) || {};
+    }
+    return {};
+  }
+
+  function daysUntilEvent(dateString) {
+    const eventDate = new Date(`${dateString}T12:00:00`);
+    if (Number.isNaN(eventDate.getTime())) {
+      return 999;
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
+  }
+
+  function getEventHealthAlerts(events) {
+    const alerts = [];
+
+    events.forEach((event) => {
+      const metric = getMetricSafe(event.id);
+      const impressions = Number(metric.impressions || 0);
+      const sold = Number(metric.ticketSalesCount || 0);
+      const capacity = Number(event.capacity || 0);
+      const registered = Number(event.registered || 0);
+      const conversion = impressions > 0 ? (sold / impressions) * 100 : 0;
+      const fillRate = capacity > 0 ? (registered / capacity) * 100 : 0;
+      const daysLeft = daysUntilEvent(event.date);
+
+      if (impressions >= 120 && conversion < 1.2) {
+        alerts.push({
+          severity: 'high',
+          message: `${event.name}: low conversion (${conversion.toFixed(1)}%). Consider pricing or copy updates.`
+        });
+      }
+
+      if (daysLeft <= 7 && daysLeft >= 0 && fillRate < 35) {
+        alerts.push({
+          severity: 'medium',
+          message: `${event.name}: event is ${daysLeft}d away with only ${fillRate.toFixed(1)}% capacity filled.`
+        });
+      }
+
+      if (fillRate >= 85 && daysLeft > 0) {
+        alerts.push({
+          severity: 'low',
+          message: `${event.name}: strong demand (${fillRate.toFixed(1)}% filled). Consider opening more inventory.`
+        });
+      }
+    });
+
+    return alerts.slice(0, 6);
+  }
+
+  function getFinanceSnapshot(events) {
+    const totals = events.reduce((acc, event) => {
+      const metric = getMetricSafe(event.id);
+      const revenue = Number(metric.ticketRevenueTotal || 0);
+      const eventDaysLeft = daysUntilEvent(event.date);
+      acc.gross += revenue;
+      if (eventDaysLeft > 0) {
+        acc.pending += revenue;
+      }
+      if (eventDaysLeft <= 0) {
+        acc.completed += revenue;
+      }
+      return acc;
+    }, { gross: 0, pending: 0, completed: 0 });
+
+    const estimatedFees = totals.gross * 0.08;
+    const estimatedNet = totals.gross - estimatedFees;
+    return {
+      gross: totals.gross,
+      pending: totals.pending,
+      completed: totals.completed,
+      estimatedFees,
+      estimatedNet
+    };
+  }
+
+  function toCsvCell(value) {
+    const text = String(value == null ? '' : value);
+    const escaped = text.replace(/"/g, '""');
+    return `"${escaped}"`;
+  }
+
+  function buildEventsCsv(events) {
+    const header = [
+      'Event Name',
+      'Date',
+      'City',
+      'Capacity',
+      'Registered',
+      'Tickets Sold',
+      'Impressions',
+      'Conversion %',
+      'Revenue'
+    ];
+
+    const rows = events.map((event) => {
+      const metric = getMetricSafe(event.id);
+      const impressions = Number(metric.impressions || 0);
+      const sold = Number(metric.ticketSalesCount || 0);
+      const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(2) : '0.00';
+      return [
+        event.name || 'Untitled',
+        event.date || '',
+        event.city || '',
+        Number(event.capacity || 0),
+        Number(event.registered || 0),
+        sold,
+        impressions,
+        conversion,
+        Number(metric.ticketRevenueTotal || 0)
+      ];
+    });
+
+    const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(','));
+    return csvLines.join('\n');
+  }
+
+  function toDomId(value) {
+    return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '-');
+  }
+
+  function clampNumber(value, min, max) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return min;
+    }
+    return Math.max(min, Math.min(max, num));
+  }
+
+  function getTicketingConfig(event) {
+    const metadata = event && typeof event.metadata === 'object' && event.metadata ? event.metadata : {};
+    const ticketing = metadata.ticketing && typeof metadata.ticketing === 'object' ? metadata.ticketing : {};
+    const tiers = Array.isArray(ticketing.tiers) ? ticketing.tiers : [];
+
+    const findTierPrice = (name, fallback) => {
+      const found = tiers.find((tier) => String(tier.name || '').toLowerCase() === name.toLowerCase());
+      return Number(found && Number.isFinite(Number(found.price)) ? found.price : fallback);
+    };
+
+    const basePrice = Number(event.price || 0);
+    return {
+      reservePercent: clampNumber(ticketing.reservePercent == null ? 10 : ticketing.reservePercent, 0, 50),
+      earlyBirdPrice: findTierPrice('Early Bird', Math.max(basePrice * 0.75, 0)),
+      regularPrice: findTierPrice('Regular', basePrice),
+      vipPrice: findTierPrice('VIP', Math.max(basePrice * 1.5, 0))
+    };
+  }
+
+  function getEventByIdSafe(eventId) {
+    if (typeof getEventById === 'function') {
+      return getEventById(eventId);
+    }
+    const hosted = getHostedEventsSafe();
+    return hosted.find((event) => event.id === eventId) || null;
+  }
+
+  function saveTicketingConfig(eventId) {
+    const event = getEventByIdSafe(eventId);
+    if (!event || typeof saveEvent !== 'function') {
+      if (typeof toast === 'function') {
+        toast('Could not update ticket settings for this event.');
+      }
+      return;
+    }
+
+    const domId = toDomId(eventId);
+    const reserveInput = document.getElementById(`tier-reserve-${domId}`);
+    const earlyInput = document.getElementById(`tier-early-${domId}`);
+    const regularInput = document.getElementById(`tier-regular-${domId}`);
+    const vipInput = document.getElementById(`tier-vip-${domId}`);
+
+    if (!reserveInput || !earlyInput || !regularInput || !vipInput) {
+      return;
+    }
+
+    const reservePercent = clampNumber(reserveInput.value, 0, 50);
+    const earlyBirdPrice = clampNumber(earlyInput.value, 0, 999999999);
+    const regularPrice = clampNumber(regularInput.value, 0, 999999999);
+    const vipPrice = clampNumber(vipInput.value, 0, 999999999);
+
+    const capacity = Math.max(0, Number(event.capacity || 0));
+    const reserveCount = Math.floor(capacity * (reservePercent / 100));
+
+    const nextMetadata = {
+      ...(event.metadata && typeof event.metadata === 'object' ? event.metadata : {}),
+      ticketing: {
+        reservePercent,
+        reserveCount,
+        tiers: [
+          { name: 'Early Bird', price: earlyBirdPrice, allocationPercent: 25 },
+          { name: 'Regular', price: regularPrice, allocationPercent: 60 },
+          { name: 'VIP', price: vipPrice, allocationPercent: 15 }
+        ]
+      }
+    };
+
+    saveEvent({ ...event, metadata: nextMetadata });
+    if (typeof toast === 'function') {
+      toast('Ticket tiers and reserve saved.');
+    }
+    render();
+  }
+
+  function getHostedEventIdSet(events) {
+    return new Set((events || []).map((event) => String(event.id || '')));
+  }
+
+  function getRefundRequests(events) {
+    const hostedIds = getHostedEventIdSet(events);
+    const tickets = getTicketsSafe();
+
+    return tickets
+      .filter((ticket) => hostedIds.has(String(ticket.eventId || '')))
+      .filter((ticket) => {
+        const status = String(ticket.refundStatus || '').toLowerCase();
+        return Boolean(ticket.refundRequested) || ['pending', 'requested', 'approved', 'rejected'].includes(status);
+      })
+      .map((ticket) => {
+        const status = String(ticket.refundStatus || (ticket.refundRequested ? 'pending' : '') || 'pending').toLowerCase();
+        const event = events.find((item) => item.id === ticket.eventId);
+        return {
+          id: ticket.id,
+          eventName: event ? event.name : 'Unknown Event',
+          attendee: ticket.name || ticket.email || ticket.phone || 'Unknown attendee',
+          amount: Number(ticket.amount || ticket.price || 0),
+          reason: ticket.refundReason || 'No reason supplied',
+          requestedAt: ticket.refundRequestedAt || ticket.createdAt || '',
+          status
+        };
+      })
+      .sort((a, b) => {
+        const statusOrder = { pending: 0, requested: 0, approved: 1, rejected: 2 };
+        const left = statusOrder[a.status] != null ? statusOrder[a.status] : 3;
+        const right = statusOrder[b.status] != null ? statusOrder[b.status] : 3;
+        if (left !== right) {
+          return left - right;
         }
+        return String(b.requestedAt || '').localeCompare(String(a.requestedAt || ''));
+      });
+  }
 
-        function getHostedEventsSafe() {
-            if (typeof getHostedEvents === 'function') {
-                return getHostedEvents();
-            }
-            return [];
-        }
+  function updateRefundStatus(ticketId, status) {
+    if (typeof getTickets !== 'function' || typeof saveTicket !== 'function') {
+      return;
+    }
 
-        function getMetricSafe(eventId) {
-            if (typeof getEventMetric === 'function') {
-                return getEventMetric(eventId) || {};
-            }
-            return {};
-        }
+    const tickets = getTickets();
+    const ticket = tickets.find((item) => item.id === ticketId);
+    if (!ticket) {
+      return;
+    }
 
-        function daysUntilEvent(dateString) {
-            const eventDate = new Date(`${dateString}T12:00:00`);
-            if (Number.isNaN(eventDate.getTime())) {
-                return 999;
-            }
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            return Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
-        }
+    const nextTicket = {
+      ...ticket,
+      refundRequested: true,
+      refundStatus: status,
+      refundResolvedAt: new Date().toISOString()
+    };
 
-        function getEventHealthAlerts(events) {
-            const alerts = [];
+    saveTicket(nextTicket);
+    if (typeof toast === 'function') {
+      toast(`Refund marked as ${status}.`);
+    }
+    render();
+  }
 
-            events.forEach((event) => {
-                const metric = getMetricSafe(event.id);
-                const impressions = Number(metric.impressions || 0);
-                const sold = Number(metric.ticketSalesCount || 0);
-                const capacity = Number(event.capacity || 0);
-                const registered = Number(event.registered || 0);
-                const conversion = impressions > 0 ? (sold / impressions) * 100 : 0;
-                const fillRate = capacity > 0 ? (registered / capacity) * 100 : 0;
-                const daysLeft = daysUntilEvent(event.date);
+  function getAudienceSegments(events) {
+    const hostedIds = getHostedEventIdSet(events);
+    const tickets = getTicketsSafe().filter((ticket) => hostedIds.has(String(ticket.eventId || '')));
+    const audienceMap = new Map();
 
-                if (impressions >= 120 && conversion < 1.2) {
-                    alerts.push({
-                        severity: 'high',
-                        message: `${event.name}: low conversion (${conversion.toFixed(1)}%). Consider pricing or copy updates.`
-                    });
-                }
+    tickets.forEach((ticket) => {
+      const email = String(ticket.email || '').trim().toLowerCase();
+      const phone = String(ticket.phone || '').trim();
+      const name = String(ticket.name || '').trim();
+      const key = email || phone || `name:${name.toLowerCase()}`;
+      if (!key) {
+        return;
+      }
 
-                if (daysLeft <= 7 && daysLeft >= 0 && fillRate < 35) {
-                    alerts.push({
-                        severity: 'medium',
-                        message: `${event.name}: event is ${daysLeft}d away with only ${fillRate.toFixed(1)}% capacity filled.`
-                    });
-                }
+      const current = audienceMap.get(key) || {
+        identity: email || phone || name || 'Unknown attendee',
+        ticketCount: 0,
+        spend: 0,
+        events: new Set(),
+        hasContact: Boolean(email || phone)
+      };
 
-                if (fillRate >= 85 && daysLeft > 0) {
-                    alerts.push({
-                        severity: 'low',
-                        message: `${event.name}: strong demand (${fillRate.toFixed(1)}% filled). Consider opening more inventory.`
-                    });
-                }
-            });
+      current.ticketCount += 1;
+      current.spend += Number(ticket.amount || ticket.price || 0);
+      current.events.add(ticket.eventId || '');
+      audienceMap.set(key, current);
+    });
 
-            return alerts.slice(0, 6);
-        }
+    const attendees = Array.from(audienceMap.values()).map((entry) => {
+      const eventCount = entry.events.size;
+      let segment = 'First-timer';
+      if (entry.ticketCount >= 3 || eventCount >= 2) {
+        segment = 'Repeat';
+      }
+      if (entry.spend >= 150000) {
+        segment = 'High Value';
+      }
+      if (!entry.hasContact) {
+        segment = 'No Contact';
+      }
+      return {
+        identity: entry.identity,
+        ticketCount: entry.ticketCount,
+        eventCount,
+        spend: entry.spend,
+        segment
+      };
+    });
 
-        function getFinanceSnapshot(events) {
-            const totals = events.reduce((acc, event) => {
-                const metric = getMetricSafe(event.id);
-                const revenue = Number(metric.ticketRevenueTotal || 0);
-                const eventDaysLeft = daysUntilEvent(event.date);
-                acc.gross += revenue;
-                if (eventDaysLeft > 0) {
-                    acc.pending += revenue;
-                }
-                if (eventDaysLeft <= 0) {
-                    acc.completed += revenue;
-                }
-                return acc;
-            }, { gross: 0, pending: 0, completed: 0 });
+    const summary = {
+      total: attendees.length,
+      repeat: attendees.filter((item) => item.segment === 'Repeat').length,
+      highValue: attendees.filter((item) => item.segment === 'High Value').length,
+      firstTimers: attendees.filter((item) => item.segment === 'First-timer').length,
+      noContact: attendees.filter((item) => item.segment === 'No Contact').length
+    };
 
-            const estimatedFees = totals.gross * 0.08;
-            const estimatedNet = totals.gross - estimatedFees;
-            return {
-                gross: totals.gross,
-                pending: totals.pending,
-                completed: totals.completed,
-                estimatedFees,
-                estimatedNet
-            };
-        }
+    attendees.sort((a, b) => b.spend - a.spend);
+    return { summary, attendees: attendees.slice(0, 12) };
+  }
 
-        function toCsvCell(value) {
-            const text = String(value == null ? '' : value);
-            const escaped = text.replace(/"/g, '""');
-            return `"${escaped}"`;
-        }
+  function renderMetricCards(events) {
+    const totals = events.reduce((acc, event) => {
+      const metric = getMetricSafe(event.id);
+      acc.events += 1;
+      acc.registrations += Number(event.registered || 0);
+      acc.tickets += Number(metric.ticketSalesCount || 0);
+      acc.revenue += Number(metric.ticketRevenueTotal || 0);
+      acc.impressions += Number(metric.impressions || 0);
+      return acc;
+    }, { events: 0, registrations: 0, tickets: 0, revenue: 0, impressions: 0 });
 
-        function buildEventsCsv(events) {
-            const header = [
-                'Event Name',
-                'Date',
-                'City',
-                'Capacity',
-                'Registered',
-                'Tickets Sold',
-                'Impressions',
-                'Conversion %',
-                'Revenue'
-            ];
-
-            const rows = events.map((event) => {
-                const metric = getMetricSafe(event.id);
-                const impressions = Number(metric.impressions || 0);
-                const sold = Number(metric.ticketSalesCount || 0);
-                const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(2) : '0.00';
-                return [
-                    event.name || 'Untitled',
-                    event.date || '',
-                    event.city || '',
-                    Number(event.capacity || 0),
-                    Number(event.registered || 0),
-                    sold,
-                    impressions,
-                    conversion,
-                    Number(metric.ticketRevenueTotal || 0)
-                ];
-            });
-
-            const csvLines = [header, ...rows].map((row) => row.map(toCsvCell).join(','));
-            return csvLines.join('\n');
-        }
-
-        function renderMetricCards(events) {
-            const totals = events.reduce((acc, event) => {
-                const metric = getMetricSafe(event.id);
-                acc.events += 1;
-                acc.registrations += Number(event.registered || 0);
-                acc.tickets += Number(metric.ticketSalesCount || 0);
-                acc.revenue += Number(metric.ticketRevenueTotal || 0);
-                acc.impressions += Number(metric.impressions || 0);
-                return acc;
-            }, { events: 0, registrations: 0, tickets: 0, revenue: 0, impressions: 0 });
-
-            return `
+    return `
       <section class="host-overview-grid" aria-label="Host overview metrics">
         <article class="host-kpi-card"><p>Hosted Events</p><strong>${totals.events}</strong></article>
         <article class="host-kpi-card"><p>Total Registered</p><strong>${totals.registrations}</strong></article>
@@ -156,15 +373,15 @@
         <article class="host-kpi-card"><p>Impressions</p><strong>${totals.impressions}</strong></article>
       </section>
     `;
-        }
+  }
 
-        function renderOverview(events) {
-            const finance = getFinanceSnapshot(events);
-            const alerts = getEventHealthAlerts(events);
-            const rows = events.slice(0, 6).map((event) => {
-                const status = typeof getEventStatusBadge === 'function' ? getEventStatusBadge(event) : { label: 'Upcoming', className: 'is-upcoming' };
-                const metric = getMetricSafe(event.id);
-                return `
+  function renderOverview(events) {
+    const finance = getFinanceSnapshot(events);
+    const alerts = getEventHealthAlerts(events);
+    const rows = events.slice(0, 6).map((event) => {
+      const status = typeof getEventStatusBadge === 'function' ? getEventStatusBadge(event) : { label: 'Upcoming', className: 'is-upcoming' };
+      const metric = getMetricSafe(event.id);
+      return `
         <tr>
           <td>${escapeHtml(event.name || 'Untitled')}</td>
           <td>${escapeHtml(typeof formatDate === 'function' ? formatDate(event.date) : event.date || '')}</td>
@@ -174,47 +391,47 @@
           <td>${typeof formatPrice === 'function' ? formatPrice(metric.ticketRevenueTotal || 0, event.currency || 'UGX') : Number(metric.ticketRevenueTotal || 0)}</td>
         </tr>
       `;
-            }).join('');
+    }).join('');
 
-            return `
+    return `
       ${renderMetricCards(events)}
-              <section class="host-toolbar card" aria-label="Dashboard quick actions">
-                <div class="host-toolbar-actions">
-                  <button type="button" class="button button-secondary button-small" onclick="TokaHostDashboardController.exportCsv()">Export CSV</button>
-                  <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.navigate('analytics')">Open Analytics</button>
-                </div>
-              </section>
-              <section class="host-finance-grid" aria-label="Finance snapshot">
-                <article class="host-finance-card card">
-                  <p class="eyebrow">Gross Revenue</p>
-                  <h3>${typeof formatPrice === 'function' ? formatPrice(finance.gross, 'UGX') : finance.gross}</h3>
-                  <p class="text-muted">Across all hosted events</p>
-                </article>
-                <article class="host-finance-card card">
-                  <p class="eyebrow">Estimated Net</p>
-                  <h3>${typeof formatPrice === 'function' ? formatPrice(finance.estimatedNet, 'UGX') : finance.estimatedNet}</h3>
-                  <p class="text-muted">After estimated platform fees (8%)</p>
-                </article>
-                <article class="host-finance-card card">
-                  <p class="eyebrow">Pending Payout</p>
-                  <h3>${typeof formatPrice === 'function' ? formatPrice(finance.pending, 'UGX') : finance.pending}</h3>
-                  <p class="text-muted">Revenue from upcoming events</p>
-                </article>
-              </section>
-              <section class="host-alerts card" aria-label="Event health alerts">
-                <div class="host-panel-head">
-                  <h3>Event Health Alerts</h3>
-                  <p class="text-muted">Auto-detected risks and opportunities</p>
-                </div>
-                <div class="host-alerts-list">
-                  ${alerts.length ? alerts.map((alert) => `
-                    <article class="host-alert-item ${escapeHtml(alert.severity)}">
-                      <span class="host-alert-dot" aria-hidden="true"></span>
-                      <p>${escapeHtml(alert.message)}</p>
-                    </article>
-                  `).join('') : '<p class="text-muted">No urgent alerts. Your events look healthy right now.</p>'}
-                </div>
-              </section>
+      <section class="host-toolbar card" aria-label="Dashboard quick actions">
+        <div class="host-toolbar-actions">
+          <button type="button" class="button button-secondary button-small" onclick="TokaHostDashboardController.exportCsv()">Export CSV</button>
+          <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.navigate('analytics')">Open Analytics</button>
+        </div>
+      </section>
+      <section class="host-finance-grid" aria-label="Finance snapshot">
+        <article class="host-finance-card card">
+          <p class="eyebrow">Gross Revenue</p>
+          <h3>${typeof formatPrice === 'function' ? formatPrice(finance.gross, 'UGX') : finance.gross}</h3>
+          <p class="text-muted">Across all hosted events</p>
+        </article>
+        <article class="host-finance-card card">
+          <p class="eyebrow">Estimated Net</p>
+          <h3>${typeof formatPrice === 'function' ? formatPrice(finance.estimatedNet, 'UGX') : finance.estimatedNet}</h3>
+          <p class="text-muted">After estimated platform fees (8%)</p>
+        </article>
+        <article class="host-finance-card card">
+          <p class="eyebrow">Pending Payout</p>
+          <h3>${typeof formatPrice === 'function' ? formatPrice(finance.pending, 'UGX') : finance.pending}</h3>
+          <p class="text-muted">Revenue from upcoming events</p>
+        </article>
+      </section>
+      <section class="host-alerts card" aria-label="Event health alerts">
+        <div class="host-panel-head">
+          <h3>Event Health Alerts</h3>
+          <p class="text-muted">Auto-detected risks and opportunities</p>
+        </div>
+        <div class="host-alerts-list">
+          ${alerts.length ? alerts.map((alert) => `
+            <article class="host-alert-item ${escapeHtml(alert.severity)}">
+              <span class="host-alert-dot" aria-hidden="true"></span>
+              <p>${escapeHtml(alert.message)}</p>
+            </article>
+          `).join('') : '<p class="text-muted">No urgent alerts. Your events look healthy right now.</p>'}
+        </div>
+      </section>
       <section class="host-panel card">
         <div class="host-panel-head">
           <h3>Latest Event Performance</h3>
@@ -238,16 +455,50 @@
         </div>
       </section>
     `;
-        }
+  }
 
-        function renderEvents(events) {
-            const cards = events.map((event) => {
-                        const metric = getMetricSafe(event.id);
-                        const cap = Number(event.capacity || 0);
-                        const reg = Number(event.registered || 0);
-                        const fillRate = cap > 0 ? ((reg / cap) * 100).toFixed(1) : '0.0';
-                        const thumb = typeof getEventThumbnail === 'function' ? getEventThumbnail(event) : '';
-                        return `
+  function renderTicketingControls(event) {
+    const domId = toDomId(event.id);
+    const config = getTicketingConfig(event);
+    return `
+      <section class="host-ticketing card" aria-label="Ticketing controls for ${escapeHtml(event.name || 'event')}">
+        <div class="host-panel-head">
+          <h4>Ticketing Controls</h4>
+          <p class="text-muted">Configure reserve and tier prices</p>
+        </div>
+        <div class="host-ticket-grid">
+          <label>
+            Reserve Capacity %
+            <input id="tier-reserve-${domId}" type="number" min="0" max="50" step="1" value="${config.reservePercent}" />
+          </label>
+          <label>
+            Early Bird Price
+            <input id="tier-early-${domId}" type="number" min="0" step="1000" value="${config.earlyBirdPrice}" />
+          </label>
+          <label>
+            Regular Price
+            <input id="tier-regular-${domId}" type="number" min="0" step="1000" value="${config.regularPrice}" />
+          </label>
+          <label>
+            VIP Price
+            <input id="tier-vip-${domId}" type="number" min="0" step="1000" value="${config.vipPrice}" />
+          </label>
+        </div>
+        <div class="host-toolbar-actions">
+          <button type="button" class="button button-secondary button-small" onclick="TokaHostDashboardController.saveTicketingConfig('${encodeURIComponent(event.id)}')">Save Ticketing</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderEvents(events) {
+    const cards = events.map((event) => {
+      const metric = getMetricSafe(event.id);
+      const cap = Number(event.capacity || 0);
+      const reg = Number(event.registered || 0);
+      const fillRate = cap > 0 ? ((reg / cap) * 100).toFixed(1) : '0.0';
+      const thumb = typeof getEventThumbnail === 'function' ? getEventThumbnail(event) : '';
+      return `
         <article class="host-event-card card">
           <div class="host-event-top">
             ${thumb ? `<img class="host-event-thumb" src="${escapeHtml(thumb)}" alt="${escapeHtml(event.name || 'Event')} thumbnail" />` : `<div class="host-event-thumb fallback">${escapeHtml(event.emoji || '🎫')}</div>`}
@@ -266,12 +517,61 @@
             <button type="button" class="button button-secondary button-small" onclick="openEventDetail('${escapeHtml(event.id)}')">View Event</button>
             <button type="button" class="button button-ghost button-small" onclick="copyToClipboard('toka.app/e/${escapeHtml(event.id)}')">Copy Link</button>
           </div>
+          ${renderTicketingControls(event)}
         </article>
       `;
     }).join('');
 
     return `
       <section class="host-event-grid">${cards || '<article class="card"><p class="text-muted">No hosted events yet.</p></article>'}</section>
+    `;
+  }
+
+  function renderRefundQueue(events) {
+    const requests = getRefundRequests(events);
+    const rows = requests.map((request) => {
+      const canResolve = request.status === 'pending' || request.status === 'requested';
+      return `
+        <tr>
+          <td>${escapeHtml(request.eventName)}</td>
+          <td>${escapeHtml(request.attendee)}</td>
+          <td>${typeof formatPrice === 'function' ? formatPrice(request.amount || 0, 'UGX') : Number(request.amount || 0)}</td>
+          <td>${escapeHtml(request.reason)}</td>
+          <td><span class="host-status-pill ${escapeHtml(request.status)}">${escapeHtml(request.status)}</span></td>
+          <td>
+            ${canResolve ? `
+              <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.updateRefundStatus(decodeURIComponent('${encodeURIComponent(request.id)}'), 'approved')">Approve</button>
+              <button type="button" class="button button-ghost button-small" onclick="TokaHostDashboardController.updateRefundStatus(decodeURIComponent('${encodeURIComponent(request.id)}'), 'rejected')">Reject</button>
+            ` : '<span class="text-muted">Resolved</span>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <section class="host-panel card" aria-label="Refund queue">
+        <div class="host-panel-head">
+          <h3>Refund Queue</h3>
+          <p class="text-muted">Manage pending attendee refund requests</p>
+        </div>
+        <div class="host-table-wrap">
+          <table class="host-table">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Attendee</th>
+                <th>Amount</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="6" class="text-muted">No refund requests found.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </section>
     `;
   }
 
@@ -291,29 +591,52 @@
     return `
       ${renderMetricCards(events)}
       <section class="host-analytics-grid">${chartBlocks || '<article class="card"><p class="text-muted">No analytics available yet.</p></article>'}</section>
+      ${renderRefundQueue(events)}
     `;
   }
 
   function renderAudience(events) {
-    const cards = events.map((event) => {
-      const metric = getMetricSafe(event.id);
-      const impressions = Number(metric.impressions || 0);
-      const sold = Number(metric.ticketSalesCount || 0);
-      const conversion = impressions > 0 ? ((sold / impressions) * 100).toFixed(1) : '0.0';
-      return `
-        <article class="host-audience-card card">
-          <h3>${escapeHtml(event.name || 'Untitled')}</h3>
-          <div class="host-audience-grid">
-            <span>Impressions <strong>${impressions}</strong></span>
-            <span>Tickets Sold <strong>${sold}</strong></span>
-            <span>Conversion <strong>${conversion}%</strong></span>
-          </div>
-        </article>
-      `;
-    }).join('');
+    const audience = getAudienceSegments(events);
+    const attendeeRows = audience.attendees.map((entry) => `
+      <tr>
+        <td>${escapeHtml(entry.identity)}</td>
+        <td>${entry.ticketCount}</td>
+        <td>${entry.eventCount}</td>
+        <td>${typeof formatPrice === 'function' ? formatPrice(entry.spend, 'UGX') : entry.spend}</td>
+        <td><span class="host-status-pill ${escapeHtml(entry.segment.toLowerCase().replace(/\s+/g, '-'))}">${escapeHtml(entry.segment)}</span></td>
+      </tr>
+    `).join('');
 
     return `
-      <section class="host-audience-stack">${cards || '<article class="card"><p class="text-muted">No audience data yet.</p></article>'}</section>
+      <section class="host-audience-summary" aria-label="Audience segments summary">
+        <article class="host-kpi-card"><p>Total Attendees</p><strong>${audience.summary.total}</strong></article>
+        <article class="host-kpi-card"><p>Repeat</p><strong>${audience.summary.repeat}</strong></article>
+        <article class="host-kpi-card"><p>High Value</p><strong>${audience.summary.highValue}</strong></article>
+        <article class="host-kpi-card"><p>First Timers</p><strong>${audience.summary.firstTimers}</strong></article>
+        <article class="host-kpi-card"><p>No Contact</p><strong>${audience.summary.noContact}</strong></article>
+      </section>
+      <section class="host-panel card" aria-label="Top attendees">
+        <div class="host-panel-head">
+          <h3>Top Audience Segments</h3>
+          <p class="text-muted">Based on repeat behavior and spend</p>
+        </div>
+        <div class="host-table-wrap">
+          <table class="host-table">
+            <thead>
+              <tr>
+                <th>Attendee</th>
+                <th>Tickets</th>
+                <th>Events</th>
+                <th>Spend</th>
+                <th>Segment</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${attendeeRows || '<tr><td colspan="5" class="text-muted">No audience ticket records available.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </section>
     `;
   }
 
@@ -490,7 +813,9 @@
     render,
     navigate,
     bindNav,
-    exportCsv
+    exportCsv,
+    saveTicketingConfig: (encodedEventId) => saveTicketingConfig(decodeURIComponent(encodedEventId)),
+    updateRefundStatus
   };
 
   if (typeof TOKA_APP_STATE === 'object' && TOKA_APP_STATE.currentScreen === 'screen-host-dashboard') {
