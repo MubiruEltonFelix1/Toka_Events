@@ -522,6 +522,41 @@ create trigger trg_toka_metrics_owner
 before insert on public.toka_event_metrics
 for each row execute function public.toka_assign_owner_user_id();
 
+-- Ensure event deletion is fully cleaned up in Supabase regardless of client behavior.
+create or replace function public.toka_cascade_event_delete()
+returns trigger
+language plpgsql
+as $$
+begin
+        delete from public.toka_tickets
+        where owner_user_id = old.owner_user_id
+            and event_id = old.id;
+
+        delete from public.toka_comments
+        where owner_user_id = old.owner_user_id
+            and event_id = old.id;
+
+        delete from public.toka_updates
+        where owner_user_id = old.owner_user_id
+            and event_id = old.id;
+
+        delete from public.toka_calendar_entries
+        where owner_user_id = old.owner_user_id
+            and event_id = old.id;
+
+        delete from public.toka_event_metrics
+        where owner_user_id = old.owner_user_id
+            and event_id = old.id;
+
+        return old;
+end;
+$$;
+
+drop trigger if exists trg_toka_events_cascade_delete on public.toka_events;
+create trigger trg_toka_events_cascade_delete
+after delete on public.toka_events
+for each row execute function public.toka_cascade_event_delete();
+
 -- ML-oriented views.
 -- Drop first so Postgres does not attempt in-place column rename/order changes
 -- when view definitions evolve.

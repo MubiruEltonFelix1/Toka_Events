@@ -10,7 +10,8 @@ const TOKA_STORAGE_KEYS = {
     eventMetrics: 'toka_event_metrics',
     deviceId: 'toka_device_id',
     eventsSyncCursor: 'toka_events_sync_cursor',
-    pendingEventSyncIds: 'toka_pending_event_sync_ids'
+    pendingEventSyncIds: 'toka_pending_event_sync_ids',
+    deletedEventIds: 'toka_deleted_event_ids'
 };
 
 const TOKA_SUPABASE_TABLES = {
@@ -59,7 +60,11 @@ function getEventsSyncCursor() {
 }
 
 function setEventsSyncCursor(cursor) {
-    if (!cursor || typeof cursor !== 'string') {
+    if (typeof cursor !== 'string') {
+        return;
+    }
+    if (!cursor) {
+        writeStorage(TOKA_STORAGE_KEYS.eventsSyncCursor, '');
         return;
     }
     writeStorage(TOKA_STORAGE_KEYS.eventsSyncCursor, cursor);
@@ -91,6 +96,34 @@ function clearPendingEventSync(eventId) {
     }
     const nextIds = getPendingEventSyncIds().filter((id) => id !== eventId);
     setPendingEventSyncIds(nextIds);
+}
+
+function getDeletedEventIds() {
+    const ids = readStorage(TOKA_STORAGE_KEYS.deletedEventIds, []);
+    return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && id) : [];
+}
+
+function setDeletedEventIds(ids) {
+    writeStorage(TOKA_STORAGE_KEYS.deletedEventIds, Array.from(new Set(ids || [])));
+}
+
+function markDeletedEventId(eventId) {
+    if (!eventId) {
+        return;
+    }
+    const ids = getDeletedEventIds();
+    if (!ids.includes(eventId)) {
+        ids.push(eventId);
+        setDeletedEventIds(ids);
+    }
+}
+
+function unmarkDeletedEventId(eventId) {
+    if (!eventId) {
+        return;
+    }
+    const nextIds = getDeletedEventIds().filter((id) => id !== eventId);
+    setDeletedEventIds(nextIds);
 }
 
 function getSupabaseConfig() {
@@ -587,7 +620,10 @@ function updateEventsSyncCursorFromRows(rows) {
 
 function mergeRemoteEventRowsIntoLocal(eventRows, options = {}) {
     updateEventsSyncCursorFromRows(eventRows);
-    const remoteEvents = pickLatestRowsByKey(eventRows, 'id').map((row) => row.payload).filter(Boolean);
+    const deletedIds = new Set(getDeletedEventIds());
+    const remoteEvents = pickLatestRowsByKey(eventRows, 'id')
+        .map((row) => row.payload)
+        .filter((event) => event && event.id && !deletedIds.has(String(event.id)));
     const previous = getSavedEvents();
     const shouldPruneMissing = Boolean(options && options.fullRefresh);
     const pendingIds = new Set(getPendingEventSyncIds());
@@ -1045,6 +1081,10 @@ function getSavedEvents() {
 }
 
 function saveEvent(event) {
+    if (!event || !event.id) {
+        return null;
+    }
+    unmarkDeletedEventId(event.id);
     const events = getSavedEvents();
     const existingIndex = events.findIndex((item) => item.id === event.id);
     if (existingIndex >= 0) {
@@ -1070,15 +1110,26 @@ function deleteEventCloud(eventId) {
             return;
         }
 
-        const { error } = await client
-            .from(TOKA_SUPABASE_TABLES.events)
-            .delete()
-            .eq('owner_user_id', ownerUserId)
-            .eq('id', eventId);
+        const deletionPlan = [
+            { table: TOKA_SUPABASE_TABLES.tickets, key: 'event_id' },
+            { table: TOKA_SUPABASE_TABLES.comments, key: 'event_id' },
+            { table: TOKA_SUPABASE_TABLES.updates, key: 'event_id' },
+            { table: TOKA_SUPABASE_TABLES.calendarEntries, key: 'event_id' },
+            { table: TOKA_SUPABASE_TABLES.eventMetrics, key: 'event_id' },
+            { table: TOKA_SUPABASE_TABLES.events, key: 'id' }
+        ];
 
-        if (error) {
-            reportSupabaseError('delete.events', error);
-            return;
+        for (const step of deletionPlan) {
+            const { error } = await client
+                .from(step.table)
+                .delete()
+                .eq('owner_user_id', ownerUserId)
+                .eq(step.key, eventId);
+
+            if (error) {
+                reportSupabaseError(`delete.events.${step.table}`, error);
+                return;
+            }
         }
 
         try {
@@ -1115,7 +1166,9 @@ function deleteSavedEvent(eventId) {
         // no-op if localStorage is unavailable
     }
 
+    markDeletedEventId(eventId);
     clearPendingEventSync(eventId);
+    setEventsSyncCursor('');
     deleteEventCloud(eventId);
     notifyCloudEventsUpdated();
     return previousEvents.length !== nextEvents.length;
@@ -1123,6 +1176,7 @@ function deleteSavedEvent(eventId) {
 
 function getEvents() {
     const savedEvents = getSavedEvents();
+    const deletedIds = new Set(getDeletedEventIds());
     const mergedEvents = new Map();
     const placeholderEventIds = new Set(MOCK_EVENTS.map((event) => event.id));
 
@@ -1133,6 +1187,9 @@ function getEvents() {
     }
 
     savedEvents.forEach((event) => {
+        if (!event || !event.id || deletedIds.has(String(event.id))) {
+            return;
+        }
         if (!TOKA_INCLUDE_PLACEHOLDER_EVENTS && placeholderEventIds.has(event.id) && event.createdBy !== 'user') {
             return;
         }
