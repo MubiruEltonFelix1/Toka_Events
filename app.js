@@ -35,7 +35,9 @@ const TOKA_APP_STATE = {
     selectedTicketTierId: '',
     eventDrawerShareOpen: false,
     publicFeedHydrationInFlight: false,
-    lastPublicFeedHydrationAt: 0
+    lastPublicFeedHydrationAt: 0,
+    loadingFallbackTimer: null,
+    eventDetailEditing: false
 };
 
 const TOKA_PWA_STATE = {
@@ -1145,6 +1147,36 @@ function getEventById(eventId) {
     return getEvents().find((event) => event.id === eventId) || null;
 }
 
+function getCurrentUserId() {
+  return String((TOKA_AUTH_STATE && TOKA_AUTH_STATE.user && TOKA_AUTH_STATE.user.id) || '').trim();
+}
+
+function userIsOrganiser(event) {
+  if (!event) {
+    return false;
+  }
+
+  const currentUserId = getCurrentUserId();
+  if (!currentUserId) {
+    return false;
+  }
+
+  const candidateIds = [
+    event.organiser_id,
+    event.organiserId,
+    event.owner_user_id,
+    event.ownerUserId,
+    event.user_id,
+    event.createdByUserId,
+    event.organiserUser && event.organiserUser.id,
+    event.user && event.user.id
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  return candidateIds.includes(currentUserId);
+}
+
 function isEventPast(event) {
   if (!event) {
         return false;
@@ -1301,6 +1333,14 @@ async function ensurePublicFeedHydrated(options = {}) {
   TOKA_APP_STATE.publicFeedHydrationInFlight = true;
   TOKA_APP_STATE.lastPublicFeedHydrationAt = now;
   TOKA_APP_STATE.isFetchingEvents = true;
+  TOKA_APP_STATE.loadingFallbackTimer = window.setTimeout(() => {
+    if (!TOKA_APP_STATE.isFetchingEvents) {
+      return;
+    }
+    TOKA_APP_STATE.isFetchingEvents = false;
+    renderHome();
+    renderDiscover();
+  }, 3000);
   renderHome();
   renderDiscover();
 
@@ -1309,6 +1349,10 @@ async function ensurePublicFeedHydrated(options = {}) {
   } catch (error) {
     console.warn('Public feed hydration failed', error);
   } finally {
+    if (TOKA_APP_STATE.loadingFallbackTimer) {
+      window.clearTimeout(TOKA_APP_STATE.loadingFallbackTimer);
+      TOKA_APP_STATE.loadingFallbackTimer = null;
+    }
     TOKA_APP_STATE.isFetchingEvents = false;
     TOKA_APP_STATE.publicFeedHydrationInFlight = false;
     renderHome();
@@ -2222,6 +2266,7 @@ function renderDetailScreen(event) {
     const ticketButton = qs('#detail-ticket-button');
     const going = qs('#detail-going');
     const priceLine = qs('#detail-price-line');
+    const editButton = qs('#detail-edit-button');
 
     if (cover) {
         cover.style.setProperty('--card-gradient', event.gradient || 'linear-gradient(135deg, #2E2E2E, #F4500A)');
@@ -2237,6 +2282,9 @@ function renderDetailScreen(event) {
     if (organiser) organiser.innerHTML = `<span class="avatar initials" style="background:${getAvatarColor(event.organiser)}">${escapeHtml(getInitials(event.organiser))}</span><span>${escapeHtml(event.organiser)}</span>`;
     if (badge) badge.textContent = event.category;
     if (description) description.textContent = event.description;
+    if (editButton) {
+      editButton.classList.toggle('hidden', !userIsOrganiser(event));
+    }
     if (meta) {
         meta.innerHTML = `
       <div class="info-row"><span class="info-icon">📅</span><span>${escapeHtml(formatDateTime(event))}</span></div>
@@ -2274,6 +2322,8 @@ function renderDetailScreen(event) {
       </div>
     `;
   }
+
+  syncEventEditPanel(event);
 }
 
 function openEventDetail(eventId) {
@@ -2283,6 +2333,7 @@ function openEventDetail(eventId) {
   }
 
   TOKA_APP_STATE.selectedEventId = eventId;
+  TOKA_APP_STATE.eventDetailEditing = false;
   recordEventCardImpression(eventId, 'event-detail-open');
   renderDetailScreen(event);
 
@@ -3010,8 +3061,15 @@ function renderProfile() {
   const phone = qs('#profile-phone');
   const stats = qs('#profile-stats');
   const interests = qs('#profile-interests');
+  const organiserTools = qs('#profile-organiser-tools');
   const settings = qs('#profile-settings');
   const referralCode = getReferralCode();
+  const hostedCount = getHostedEvents().length;
+  const profileRole = String(profile.role || profile.accountType || '').trim().toLowerCase();
+  const profileWantsDashboard = profile.is_organiser === true || profile.isOrganiser === true || profileRole === 'organiser' || profileRole === 'host';
+  const hasOrganiserAccess = hostedCount > 0 || profileWantsDashboard;
+  const organiserDashboardAction = 'openHostDashboard()';
+  const organiserDashboardLabel = 'Go to Organiser Dashboard';
 
   if (avatar) {
     avatar.textContent = getInitials(profile.name || 'Toka');
@@ -3020,12 +3078,25 @@ function renderProfile() {
   if (name) name.textContent = profile.name || 'Your Profile';
   if (phone) phone.textContent = profile.phone || '+256 --- ----';
   if (stats) {
-    const hostedCount = getHostedEvents().length;
     stats.innerHTML = `
       <div class="stat-card"><strong>${getTickets().length}</strong><span>Events Attended</span></div>
       <div class="stat-card"><strong>${hostedCount}</strong><span>Events Hosted</span></div>
       <div class="stat-card"><strong>${referralCode ? 1 : 0}</strong><span>Referrals</span></div>
     `;
+  }
+  if (organiserTools) {
+    organiserTools.classList.toggle('hidden', !hasOrganiserAccess);
+    organiserTools.innerHTML = hasOrganiserAccess ? `
+      <div class="organiser-card">
+        <p class="eyebrow">Organiser Tools</p>
+        <h3>${hostedCount > 0 ? 'Manage your events' : 'Create your first event'}</h3>
+        <p class="text-muted">${hostedCount > 0 ? 'Open the organiser dashboard to edit events, review attendance, and post updates.' : 'Set up an event first, then the organiser dashboard will be ready here.'}</p>
+        <div class="organiser-card-actions">
+          <button type="button" class="button button-primary button-small" onclick="${organiserDashboardAction}">${organiserDashboardLabel}</button>
+          <button type="button" class="button button-secondary button-small" onclick="showScreen('screen-host')">Create Event</button>
+        </div>
+      </div>
+    ` : '';
   }
   if (interests) {
     interests.innerHTML = TOKA_INTEREST_OPTIONS.map((interest) => `
@@ -3033,7 +3104,7 @@ function renderProfile() {
     `).join('');
   }
   if (settings) {
-    const hasHostedEvents = getHostedEvents().length > 0;
+    const hasHostedEvents = hasOrganiserAccess;
     settings.innerHTML = `
       <button type="button" class="settings-item" onclick="editProfile()"><span>Edit Profile</span><span>›</span></button>
       <button type="button" class="settings-item" onclick="toggleNotifications()"><span>Notifications</span><span>${profile.notificationsEnabled === false ? 'Off' : 'On'}</span></button>
@@ -3111,6 +3182,131 @@ function editProfile() {
   }
   renderProfile();
   toast('Profile updated.');
+}
+
+function getEventEditFormValues() {
+  const titleInput = qs('#event-edit-title');
+  const descriptionInput = qs('#event-edit-description');
+  const dateInput = qs('#event-edit-date');
+  const timeInput = qs('#event-edit-time');
+  const locationInput = qs('#event-edit-location');
+  const cityInput = qs('#event-edit-city');
+  const priceInput = qs('#event-edit-price');
+  const capacityInput = qs('#event-edit-capacity');
+  const imageInput = qs('#event-edit-image-url');
+
+  return {
+    title: titleInput ? titleInput.value.trim() : '',
+    description: descriptionInput ? descriptionInput.value.trim() : '',
+    date: dateInput ? dateInput.value : '',
+    time: timeInput ? timeInput.value : '',
+    location: locationInput ? locationInput.value.trim() : '',
+    city: cityInput ? cityInput.value.trim() : '',
+    price: priceInput ? priceInput.value : '',
+    capacity: capacityInput ? capacityInput.value : '',
+    imageUrl: imageInput ? imageInput.value.trim() : ''
+  };
+}
+
+function syncEventEditPanel(event) {
+  const panel = qs('#event-edit-panel');
+  const toggleButton = qs('#detail-edit-button');
+  const eventEditable = Boolean(event && userIsOrganiser(event));
+
+  if (toggleButton) {
+    toggleButton.classList.toggle('hidden', !eventEditable);
+  }
+
+  if (!panel) {
+    return;
+  }
+
+  const editing = eventEditable && Boolean(TOKA_APP_STATE.eventDetailEditing);
+  panel.classList.toggle('hidden', !editing);
+
+  if (!editing || !event) {
+    return;
+  }
+
+  const titleInput = qs('#event-edit-title');
+  const descriptionInput = qs('#event-edit-description');
+  const dateInput = qs('#event-edit-date');
+  const timeInput = qs('#event-edit-time');
+  const locationInput = qs('#event-edit-location');
+  const cityInput = qs('#event-edit-city');
+  const priceInput = qs('#event-edit-price');
+  const capacityInput = qs('#event-edit-capacity');
+  const imageInput = qs('#event-edit-image-url');
+
+  if (titleInput) titleInput.value = event.name || '';
+  if (descriptionInput) descriptionInput.value = event.description || '';
+  if (dateInput) dateInput.value = event.date || '';
+  if (timeInput) timeInput.value = String(event.time || '').trim();
+  if (locationInput) locationInput.value = event.venue || '';
+  if (cityInput) cityInput.value = event.city || '';
+  if (priceInput) priceInput.value = Number(event.price || 0) > 0 ? String(event.price || '') : '';
+  if (capacityInput) capacityInput.value = Number(event.capacity || 0) > 0 ? String(event.capacity || '') : '';
+  if (imageInput) imageInput.value = event.thumbnailUrl || event.thumbnailDataUrl || '';
+}
+
+function startEventEditMode() {
+  const event = getEventById(TOKA_APP_STATE.selectedEventId);
+  if (!event || !userIsOrganiser(event)) {
+    toast('Only the organiser can edit this event.');
+    return;
+  }
+
+  TOKA_APP_STATE.eventDetailEditing = true;
+  renderDetailScreen(event);
+}
+
+function cancelEventEditMode() {
+  TOKA_APP_STATE.eventDetailEditing = false;
+  const event = getEventById(TOKA_APP_STATE.selectedEventId);
+  if (event) {
+    renderDetailScreen(event);
+  }
+}
+
+function saveEventEditMode(submitEvent) {
+  if (submitEvent && typeof submitEvent.preventDefault === 'function') {
+    submitEvent.preventDefault();
+  }
+
+  const event = getEventById(TOKA_APP_STATE.selectedEventId);
+  if (!event || !userIsOrganiser(event)) {
+    toast('Only the organiser can update this event.');
+    return;
+  }
+
+  const values = getEventEditFormValues();
+  const nextEvent = {
+    ...event,
+    name: values.title || event.name,
+    description: values.description,
+    date: values.date || event.date,
+    time: values.time || event.time,
+    venue: values.location || event.venue,
+    city: values.city || event.city,
+    price: values.price === '' ? 0 : Number(values.price),
+    capacity: values.capacity === '' ? Number(event.capacity || 0) : Number(values.capacity),
+    thumbnailUrl: values.imageUrl || '',
+    image_url: values.imageUrl || '',
+    updatedAt: new Date().toISOString()
+  };
+
+  saveEvent(nextEvent);
+  TOKA_APP_STATE.eventDetailEditing = false;
+  renderHome();
+  renderDiscover();
+  renderTickets();
+  renderProfile();
+  renderDetailScreen(nextEvent);
+  loadEventEngagement(nextEvent.id);
+  if (TOKA_APP_STATE.currentScreen === 'screen-host-dashboard') {
+    renderHostDashboard();
+  }
+  toast('Event updated.');
 }
 
 function aboutToka() {
@@ -4341,6 +4537,14 @@ async function initApp() {
   renderAuthHeader();
 
   TOKA_APP_STATE.isFetchingEvents = true;
+  TOKA_APP_STATE.loadingFallbackTimer = window.setTimeout(() => {
+    if (!TOKA_APP_STATE.isFetchingEvents) {
+      return;
+    }
+    TOKA_APP_STATE.isFetchingEvents = false;
+    renderHome();
+    renderDiscover();
+  }, 3000);
   renderHome();
   renderDiscover();
 
@@ -4371,6 +4575,10 @@ async function initApp() {
   } catch (error) {
     console.warn('Startup sync failed', error);
   } finally {
+    if (TOKA_APP_STATE.loadingFallbackTimer) {
+      window.clearTimeout(TOKA_APP_STATE.loadingFallbackTimer);
+      TOKA_APP_STATE.loadingFallbackTimer = null;
+    }
     TOKA_APP_STATE.isFetchingEvents = false;
   }
 
@@ -4435,6 +4643,9 @@ window.setDiscoverTimeFilter = setDiscoverTimeFilter;
 window.toggleProfileInterest = toggleProfileInterest;
 window.toggleNotifications = toggleNotifications;
 window.editProfile = editProfile;
+window.startEventEditMode = startEventEditMode;
+window.cancelEventEditMode = cancelEventEditMode;
+window.saveEventEditMode = saveEventEditMode;
 window.aboutToka = aboutToka;
 window.copyToClipboard = copyToClipboard;
 window.shareTicket = shareTicket;

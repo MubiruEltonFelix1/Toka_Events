@@ -312,12 +312,59 @@
                     <span class="badge" id="detail-badge">Event</span>
                     <h1 class="detail-title" id="detail-title">Event title</h1>
                     <div class="detail-organiser" id="detail-organiser"></div>
+                    <div class="detail-actions">
+                        <button type="button" class="button button-secondary button-small hidden" id="detail-edit-button" onclick="startEventEditMode()">Edit Event</button>
+                    </div>
                     <p class="text-muted" id="detail-description"></p>
                     <div class="detail-meta-grid" id="detail-meta"></div>
                     <div class="card">
                         <p class="eyebrow">Who's Going</p>
                         <div id="detail-going"></div>
                     </div>
+                </div>
+
+                <div class="card event-edit-panel hidden" id="event-edit-panel">
+                    <div class="section-head">
+                        <div>
+                            <p class="eyebrow">Edit Details</p>
+                            <h3>Update this event</h3>
+                        </div>
+                    </div>
+                    <form id="event-edit-form" class="event-edit-form" onsubmit="saveEventEditMode(event)" novalidate>
+                        <div class="event-edit-grid">
+                            <label class="field-group">Title
+                                <input id="event-edit-title" type="text" required />
+                            </label>
+                            <label class="field-group">Date
+                                <input id="event-edit-date" type="date" required />
+                            </label>
+                            <label class="field-group">Time
+                                <input id="event-edit-time" type="text" placeholder="7:00 PM" />
+                            </label>
+                            <label class="field-group">Location
+                                <input id="event-edit-location" type="text" />
+                            </label>
+                            <label class="field-group">City
+                                <input id="event-edit-city" type="text" />
+                            </label>
+                            <label class="field-group">Ticket Price (UGX)
+                                <input id="event-edit-price" type="number" min="0" step="1000" />
+                            </label>
+                            <label class="field-group">Capacity
+                                <input id="event-edit-capacity" type="number" min="1" step="1" />
+                            </label>
+                            <label class="field-group event-edit-wide">Image URL
+                                <input id="event-edit-image-url" type="url" placeholder="https://..." />
+                            </label>
+                            <label class="field-group event-edit-wide">Description
+                                <textarea id="event-edit-description" rows="4"></textarea>
+                            </label>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="button button-primary" id="event-edit-save-button">Save Changes</button>
+                            <button type="button" class="button button-secondary" id="event-edit-cancel-button" onclick="cancelEventEditMode()">Cancel</button>
+                        </div>
+                    </form>
                 </div>
 
                 <!-- -- ORGANISER UPDATES ------------------------------------ -->
@@ -682,6 +729,10 @@
                 <main class="host-admin-main">
                     <header class="host-admin-header">
                         <div>
+                            <nav class="breadcrumb host-breadcrumb" aria-label="Breadcrumb">
+                                <a href="#/profile">← Back to Profile</a>
+                                <span>/ Organiser Dashboard</span>
+                            </nav>
                             <p class="eyebrow" id="host-dashboard-route-label">Overview</p>
                             <h2 id="host-dashboard-title">Host Dashboard</h2>
                         </div>
@@ -719,6 +770,8 @@
                     </div>
                     <div id="profile-stats" class="stat-row section-card"></div>
                 </div>
+
+                <div id="profile-organiser-tools" class="profile-organiser-tools hidden"></div>
 
                 <div class="card">
                     <div class="section-head">
