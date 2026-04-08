@@ -1,68 +1,69 @@
 # ML Data and Training Notes
 
-## Purpose
+## Goal
 
-This file documents data contracts for model training and analytics workflows.
+Document the data contract used for event analytics and ML experimentation.
 
-## Data Sources
+## Source SQL assets
 
-1. Event features view from Supabase:
-	1. toka_ml_event_features
-2. Training rows view from Supabase:
-	1. toka_ml_training_rows
-3. Admin split and checks from [supabase-ml-admin.sql](../supabase-ml-admin.sql).
+- supabase-schema.sql: base ML feature and training views
+- supabase-ml-admin.sql: admin helpers for training splits and checks
 
-## Core Features
+## Primary views
 
-1. Category, event_type, delivery_mode.
-2. City, starts_at, price_amount, capacity.
-3. Engagement signals:
-	1. impressions
-	2. comment_count
-	3. avg_likes_per_comment
-4. Outcome signals:
-	1. ticket_sales_count
-	2. ticket_revenue_total
-	3. ticket_count
+- toka_ml_event_features
+- toka_ml_training_rows
 
-## Labels
+These views should remain stable enough for repeatable model pipelines.
 
-Current label banding is sales_band:
+## Feature categories
 
-1. high: ticket_sales_count greater or equal to 10
-2. medium: between 3 and 9
-3. low: below 3
+- Event metadata: category, event_type, delivery_mode
+- Time/location: starts_at, city
+- Commercial signals: price_amount, capacity
+- Engagement signals: impressions, comment_count, avg_likes_per_comment
+- Outcome signals: ticket_count, ticket_sales_count, ticket_revenue_total
 
-## Split Strategy
+## Labeling
 
-Use deterministic split from toka_ml_training_split:
+Current training label: sales_band
 
-1. train: 80 percent
-2. validation: 10 percent
-3. test: 10 percent
+- high: ticket_sales_count >= 10
+- medium: 3 to 9
+- low: < 3
 
-This avoids random reshuffling between model runs.
+## Split strategy
 
-## Data Quality Checks
+Deterministic split using admin helpers:
 
-Use toka_ml_quality_checks for quick diagnostics:
+- train: 80%
+- validation: 10%
+- test: 10%
 
-1. missing category
-2. missing starts_at
-3. missing city
-4. missing price_amount
-5. invalid capacity
+Use deterministic logic to avoid random reshuffle across runs.
 
-## Reproducible Snapshots
+## Quality checks
 
-For reproducibility, persist daily snapshots using:
+Use quality check views/scripts to flag:
 
-1. public.toka_ml_refresh_daily_snapshot(current_date)
+- missing category
+- missing starts_at
+- missing city
+- missing price_amount
+- invalid capacity
 
-This writes to partitioned table:
+## Snapshotting
 
-1. toka_ml_event_daily
+Recommended for reproducibility:
 
-## Status
+- Persist dated snapshots of training-ready rows.
+- Keep snapshot process consistent across experiments.
 
-Active ML data contract notes.
+## Practical workflow
+
+1. Refresh source event/ticket metrics.
+2. Recompute feature/training views.
+3. Run quality checks.
+4. Materialize snapshot.
+5. Train/evaluate with deterministic split.
+6. Log model metadata and source snapshot reference.

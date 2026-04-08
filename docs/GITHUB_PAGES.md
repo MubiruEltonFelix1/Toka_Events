@@ -2,56 +2,57 @@
 
 ## Goal
 
-Host the frontend on GitHub Pages while keeping Supabase connection stable and secure.
+Deploy the static app to GitHub Pages while keeping Supabase integration safe and stable.
 
-## Quick Publish Steps
+## One-time deployment setup
 
-1. Push this project to a GitHub repository.
-2. In repository settings, open Pages.
-3. Source:
-   1. Deploy from branch
-   2. Branch: main
-   3. Folder: root
-4. Save and wait for deployment URL.
+1. Push this repository to GitHub.
+2. Open repository settings.
+3. Go to Pages.
+4. Select Deploy from a branch.
+5. Choose branch: main (or your deploy branch).
+6. Choose folder: /(root).
+7. Save and wait for the build.
 
-## Frontend and Supabase Tips
+## URL patterns
 
-1. Use only publishable key in [supabase-config.js](../supabase-config.js).
-2. Never expose secret keys in frontend code.
-3. Keep RLS enabled on all public tables.
-4. Ensure Anonymous Auth provider is enabled if app signs in anonymously.
+Your site will usually be available as one of these:
 
-## CORS and Allowed Origins
+- https://username.github.io
+- https://username.github.io/repository-name
 
-1. In Supabase auth settings, add your GitHub Pages domain as an allowed site URL.
-2. Add both forms if needed:
-   1. https://username.github.io
-   2. https://username.github.io/repository-name
+## Supabase compatibility checklist
 
-## Routing Tips for Static Hosting
+- supabase-config.js uses only publishable key
+- Anonymous Auth provider enabled
+- Site URL and redirect settings include your Pages domain
+- RLS enabled for all app tables
 
-1. This app uses hash routes, which work well on GitHub Pages.
-2. Keep links and asset paths relative unless intentionally absolute.
+## Static routing note
 
-## Cache and Update Tips
+This app uses hash routes, which are safe for static hosting because route state stays client-side.
 
-1. After deploy, force refresh with Ctrl+F5.
-2. If config changes are not visible, version bump script references or clear browser cache.
+## Post-deploy validation
 
-## Verification Checklist
+1. Open deployed URL in private browser window.
+2. Confirm onboarding loads.
+3. Confirm event list renders.
+4. Confirm registration flow completes.
+5. Confirm profile/tickets are visible.
+6. If Supabase is enabled, verify rows are written.
 
-1. App loads from GitHub Pages URL.
-2. Onboarding works.
-3. Event publish works.
-4. Ticket registration works.
-5. Supabase tables receive new rows.
+## Cache refresh tips
 
-## Troubleshooting
+- Hard refresh after each deployment.
+- If service worker caching causes stale assets, increment asset references or update service worker versioning.
 
-1. If app loads but no sync occurs:
-   1. confirm URL and publishable key values
-   2. confirm schema scripts ran successfully
-   3. confirm Anonymous Auth provider is enabled
-2. If you see permission errors:
-   1. verify owner-based RLS policies exist
-   2. verify session exists in Supabase Auth logs
+## Common issues
+
+- Blank page after deploy:
+  - Check console for missing asset paths
+  - Verify files are in selected branch/folder
+- App runs but no cloud sync:
+  - Re-check supabase-config.js
+  - Verify schema and auth settings
+- Permission denied from Supabase:
+  - Inspect RLS policies and owner_user_id mapping

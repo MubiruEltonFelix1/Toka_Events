@@ -1,58 +1,61 @@
 # Architecture Notes
 
-## Purpose
+## Goal
 
-This file explains system structure and major technical decisions.
+Describe the current system layout and the practical evolution path.
 
-## Current Snapshot
+## Current architecture
 
-Current app architecture:
+The application is a static, client-rendered web app.
 
-1. Frontend: HTML, CSS, vanilla JavaScript.
-2. UI logic and state: [app.js](../app.js).
-3. Data and sync helpers: [data.js](../data.js).
-4. Persistence model:
-	1. local storage for fast client experience
-	2. Supabase sync for cloud persistence
+- index.html contains screen shells and static structure.
+- app.js contains route handling, rendering orchestration, and core UI flow logic.
+- host-dashboard-controller.js isolates host dashboard route/controller behavior.
+- data.js manages local state persistence and optional Supabase synchronization.
+- style.css defines visual system and responsive behavior.
 
-## What Is Strong
+## Routing model
 
-1. Clear MVP core journey: discover, register, confirm, tickets.
-2. Good visual consistency and mobile-first approach.
-3. Feature breadth sufficient for early user validation.
-4. Data helpers are separated from screen rendering logic.
+- Hash-based navigation for static hosting compatibility.
+- Host routes live under #/host/*.
+- Profile and host tools are connected through organizer access paths.
 
-## Key Limits
+## Data model strategy
 
-1. Large app.js file has many responsibilities.
-2. Validation and analytics instrumentation still basic.
-3. Automated test coverage is not yet in place.
-4. Accessibility has not had a full audit pass.
+- localStorage-first for fast perceived performance.
+- Supabase mirror for persistence and cross-session continuity.
+- owner_user_id ownership model for secure multi-user row isolation.
 
-## Recommended Evolution Path
+## Strengths
 
-### Immediate
+- Minimal runtime complexity (no build step required).
+- Fast startup and lightweight deployment.
+- Clear separation between host dashboard controller and main UI flow.
+- Static hosting friendly.
 
-1. Tighten form validations and edge-case handling.
-2. Add key funnel analytics events.
-3. Keep backend data contract documented and stable.
+## Known limits
 
-### Near-Term
+- app.js still carries broad responsibilities.
+- Limited automated test coverage.
+- Accessibility and observability need deeper passes.
+- Client-side trust boundaries remain for some workflows.
 
-1. Split frontend into modules:
-	1. state
-	2. renderers
-	3. services
-	4. feature modules
-2. Add baseline unit and integration tests.
-3. Do accessibility and performance passes.
+## Recommended evolution
 
-### Later
+### Short term
 
-1. Move full trust-critical flows backend-side.
-2. Add server-side ticket verification and fraud controls.
-3. Expand organizer analytics and community features.
+- Continue extracting feature-specific modules from app.js.
+- Add stronger validation around registration/hosting forms.
+- Add structured analytics events for funnel visibility.
 
-## Status
+### Mid term
 
-Living architecture notes.
+- Introduce test baseline (unit + integration smoke checks).
+- Improve offline/cache behavior with explicit update strategy.
+- Add accessibility pass across core user journeys.
+
+### Long term
+
+- Move trust-critical actions to backend APIs.
+- Add server-side ticket verification endpoints.
+- Expand organizer analytics and community features with stronger data contracts.

@@ -1,43 +1,63 @@
 # Security and Access Policies
 
-## Purpose
+## Goal
 
-This file captures authentication, authorization, and data access rules.
+Define baseline security controls for the current frontend + Supabase architecture.
 
-## Current Security Model
+## Core principles
 
-1. Frontend uses Supabase publishable key only.
-2. Client signs in anonymously via Supabase Auth.
-3. Data rows are scoped by owner_user_id with authenticated RLS policies.
+- Least privilege by default.
+- No secret keys in frontend code.
+- Row-level ownership controls for all user-scoped data.
+- Fast credential rotation and audit on exposure.
 
-## RLS Policy Principle
+## Authentication and identity
 
-All app tables use owner-based access:
+- Supabase anonymous auth is used for lightweight identity.
+- auth.uid() is the primary user identity for policy decisions.
 
-1. Read allowed only when owner_user_id equals auth.uid().
-2. Write allowed only when owner_user_id equals auth.uid().
+## Authorization model
 
-## Key Handling Rules
+- Tables with user-owned data include owner_user_id.
+- RLS policies should enforce:
+  - read only when owner_user_id = auth.uid()
+  - write only when owner_user_id = auth.uid()
+- Public browsing data should be separated from owner-only host data when needed.
 
-1. Publishable key can be in frontend config.
-2. Secret keys must never be stored in frontend files.
-3. If a secret key is exposed, rotate immediately.
+## Key handling policy
 
-## Incident Response Checklist
+Allowed in frontend:
 
-1. Rotate affected credentials.
-2. Review recent API activity and table writes.
-3. Revoke risky sessions if needed.
-4. Confirm RLS policies are active on all public tables.
-5. Verify no open allow-all policies remain.
+- Project URL
+- Publishable anon key
 
-## Production Hardening Checklist
+Never in frontend:
 
-1. Enforce HTTPS only.
-2. Add request rate limiting at API layer when backend is introduced.
-3. Keep backups enabled and tested.
-4. Add monitoring for auth and write anomalies.
+- Service role key
+- Database password
+- Any long-lived privileged token
 
-## Status
+## Operational checklist
 
-Active security baseline.
+- Confirm RLS enabled on every public schema app table.
+- Verify no broad allow-all policies exist.
+- Review auth logs for unusual anonymous session spikes.
+- Audit owner_user_id population on newly inserted rows.
+
+## Incident response
+
+If credentials or data access is suspected compromised:
+
+1. Rotate affected keys immediately.
+2. Review recent API/auth activity.
+3. Disable risky integrations temporarily.
+4. Tighten or patch RLS policies.
+5. Validate with fresh anonymous session tests.
+6. Document root cause and prevention action.
+
+## Hardening roadmap
+
+- Add backend API layer for trust-critical operations.
+- Add server-side verification for ticket validation workflows.
+- Introduce rate limiting and abuse detection.
+- Add periodic security review checklist to release process.

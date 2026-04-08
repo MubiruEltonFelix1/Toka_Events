@@ -1,43 +1,58 @@
 # Setup Guide
 
-## Purpose
+## Goal
 
-This file holds local setup instructions and environment preparation steps.
+Get the app running locally with optional Supabase sync enabled.
 
-## Local Frontend Setup
+## Prerequisites
+
+- VS Code
+- A modern browser (Chrome, Edge, Firefox)
+- A static file server extension or CLI server
+- Optional: Supabase project for cloud sync
+
+## Local run
 
 1. Clone the repository.
-2. Open the project in VS Code.
-3. Run from a local server (for example, Live Server extension).
+2. Open the folder in VS Code.
+3. Start a local static server from the project root.
 4. Open the served URL in your browser.
 
-## Environment and Keys
+## First functional check
 
-1. Keep browser-safe keys in [supabase-config.js](../supabase-config.js).
-2. Never place secret keys in frontend files.
-3. Rotate keys immediately if exposed.
+Run through this sequence after startup:
 
-## Backend Transition Plan
+1. Complete onboarding.
+2. Browse or search events.
+3. Open an event detail page.
+4. Register for an event.
+5. Confirm ticket appears in profile/tickets.
+6. If organizer access is available, open host dashboard.
 
-When moving from MVP frontend-only architecture:
+## Optional Supabase configuration
 
-1. Create FastAPI project structure.
-2. Add environment configuration and CORS.
-3. Define core tables and API contract:
-	1. users
-	2. events
-	3. registrations
-	4. payments
-	5. tickets
-	6. referrals
-4. Connect frontend registration and ticket flow to backend APIs.
+1. Create a Supabase project.
+2. Run schema scripts in this order:
+   - supabase-schema.sql
+   - supabase-ml-admin.sql (optional, for ML/admin views)
+3. Add project URL and publishable key to supabase-config.js.
+4. Ensure Anonymous Auth provider is enabled.
+5. Reload app and verify data sync.
 
-## Common Startup Troubleshooting
+## Troubleshooting
 
-1. If Supabase does not sync, check URL and publishable key in [supabase-config.js](../supabase-config.js).
-2. If writes fail under RLS, confirm Anonymous Auth provider is enabled.
-3. If data appears missing, refresh and verify table filters in Supabase dashboard.
+- App loads but no data sync:
+  - Verify URL/key in supabase-config.js
+  - Confirm schema script completed without errors
+  - Confirm RLS policies are active
+- Permission denied from Supabase:
+  - Confirm user has an anonymous auth session
+  - Confirm owner_user_id policies match auth.uid()
+- Host dashboard data looks stale:
+  - Reload page once to refresh local cache
+  - Check if event rows exist for the current owner_user_id
 
-## Status
+## Notes
 
-Active working guide.
+- localStorage is used for fast UX and can mask remote changes until refresh.
+- Never place secret/service keys in frontend files.

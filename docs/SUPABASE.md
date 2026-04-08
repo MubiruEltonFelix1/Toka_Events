@@ -1,45 +1,77 @@
 # Supabase Guide
 
-## Purpose
+## Goal
 
-This file is dedicated to Supabase configuration, schema rollout, and operational checks.
+Configure Supabase as the optional cloud sync and analytics backend for this frontend-first app.
 
-## Project Setup
+## Integration model
 
-1. Create project in region closest to users.
-2. Enable Data API.
-3. Enable automatic RLS.
-4. In Authentication providers, enable Anonymous Auth.
+- UI remains local-first for speed.
+- Supabase mirrors key entities for persistence and analytics.
+- Access is controlled with anonymous auth sessions plus owner_user_id RLS rules.
 
-## Key Configuration
+## Required setup
 
-1. Use Project URL plus publishable key in [supabase-config.js](../supabase-config.js).
-2. Never use secret key in browser code.
+1. Create a Supabase project near your target users.
+2. Enable Anonymous Auth provider.
+3. Confirm Row Level Security is enabled for app tables.
+4. Run SQL scripts:
+   - supabase-schema.sql
+   - supabase-ml-admin.sql (optional)
 
-## Schema Rollout
+## Frontend configuration
 
-1. Run [supabase-schema.sql](../supabase-schema.sql).
-2. Optional: run [supabase-ml-admin.sql](../supabase-ml-admin.sql).
+Update supabase-config.js with:
 
-## Validation Flow
+- Project URL
+- Publishable (anon/public) key
 
-1. Complete onboarding in app.
-2. Publish one event.
-3. Register one ticket.
-4. Add one comment or organizer update.
-5. Confirm rows in:
-	1. toka_profiles
-	2. toka_events
-	3. toka_tickets
-	4. toka_event_metrics
+Do not place service role or secret keys in frontend code.
 
-## Operations and Maintenance
+## Data ownership model
 
-1. Rotate exposed credentials immediately.
-2. Monitor table growth and index performance.
-3. Keep periodic exports or backups for critical data.
-4. Re-run schema scripts after controlled updates.
+- Each row stores owner_user_id.
+- Policies scope reads and writes to auth.uid().
+- Public browsing paths can use dedicated public-read tables/views where needed.
 
-## Status
+## Typical sync scope
 
-Active operational guide.
+The app can mirror data such as:
+
+- profiles
+- events
+- tickets
+- comments
+- organizer updates
+- calendar entries
+- event metrics
+
+Exact mirrored fields are defined by current app/data layer implementation.
+
+## Validation checklist
+
+1. Open app and complete onboarding.
+2. Create or update profile details.
+3. Publish a host event.
+4. Register for an event.
+5. Add a comment or organizer update.
+6. Confirm expected rows in Supabase tables/views.
+
+## Troubleshooting
+
+- Anonymous sign-in fails:
+  - Verify provider is enabled
+  - Check auth settings and site URL
+- RLS policy errors:
+  - Confirm owner_user_id is populated
+  - Confirm policy predicates use auth.uid()
+- Data appears only locally:
+  - Check browser console for Supabase errors
+  - Verify config values and schema deployment
+
+## Operational recommendations
+
+- Rotate exposed publishable keys if misuse is detected.
+- Periodically review RLS policies and indexes.
+- Snapshot critical tables before major schema changes.
+- Keep schema files in repo as source of truth.
