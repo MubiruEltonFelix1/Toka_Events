@@ -1,104 +1,152 @@
-# Toka Events
+<div align="center">
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d0d14,40:1a0d2e,80:0d1a15,100:0d0d14&height=140&section=header&text=Toka%20Events&fontSize=44&fontColor=eeedfe&fontAlignY=55&desc=Discover.%20Register.%20Show%20up.&descAlignY=80&descSize=15&animation=fadeIn" width="100%"/>
+</div>
 
-Toka Events is a mobile-first web app for discovering local events, registering quickly, and managing host workflows.
+<div align="center">
 
-I am building this project in public with a strong focus on African event realities: mobile money expectations, lightweight onboarding, and practical organizer tooling.
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-000000?style=flat-square&logo=vercel&logoColor=white)](#)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/MubiruEltonFelix1)
+[![PWA Ready](https://img.shields.io/badge/PWA-Ready-5a2d9c?style=flat-square&logo=pwa&logoColor=white)](#)
+[![MIT License](https://img.shields.io/badge/License-MIT-1d9e75?style=flat-square)](#)
+[![Status](https://img.shields.io/badge/Status-Active-1d9e75?style=flat-square)](#)
 
-## What the app does today
+</div>
 
-- Personalized onboarding and event discovery
-- Event detail, registration, and ticket generation with QR support
-- Profile and ticket history screens
-- Host dashboard with organizer metrics and management tools
-- Local-first UX (fast UI from browser storage) with optional Supabase sync
-- GitHub Pages compatible static deployment
+---
+
+**Toka Events** is a mobile-first web app for discovering local events, registering fast, and managing host workflows — built with African event realities at the center: mobile money expectations, lightweight onboarding, and practical organiser tooling.
+
+This project is being built in public. Every architectural decision, every tradeoff, every SQL view — documented and open.
+
+---
+
+## What it does
+
+| Feature | Detail |
+|---|---|
+| **Event discovery** | Personalised onboarding flow + browsable event feed |
+| **Registration & tickets** | One-tap registration with QR-code ticket generation |
+| **Profile & history** | Ticket history and personal event timeline |
+| **Host dashboard** | Organiser metrics, attendee management, hash-based subroutes |
+| **Local-first UX** | Instant UI from browser storage — no loading spinner hell |
+| **Optional cloud sync** | Supabase mirror for persistence across devices |
+| **Static deployment** | GitHub Pages compatible — zero server required |
+
+---
 
 ## Tech stack
 
-- Frontend: HTML, CSS, vanilla JavaScript
-- Data layer: localStorage as immediate source, optional Supabase mirror
-- Hosting: GitHub Pages (static)
-- PWA support: manifest + service worker
+| Layer | Choice | Why |
+|---|---|---|
+| **Frontend** | HTML · CSS · Vanilla JS | Zero build step, works on low-end devices |
+| **Data** | `localStorage` → Supabase | Local-first, cloud is opt-in |
+| **Auth** | Supabase anonymous sessions | No account friction at entry |
+| **Hosting** | GitHub Pages | Free, fast, reliable static serving |
+| **PWA** | Manifest + service worker | Installable, works offline |
+
+---
 
 ## Project structure
 
 ```text
 Toka_Events/
-  index.html
-  app.js
-  data.js
-  host-dashboard-controller.js
-  style.css
-  supabase-config.js
-  supabase-schema.sql
-  supabase-ml-admin.sql
-  docs/
-    README.md
-    SETUP.md
-    ARCHITECTURE.md
-    SUPABASE.md
-    GITHUB_PAGES.md
-    SECURITY.md
-    ML_DATA.md
+├── index.html
+├── app.js
+├── data.js
+├── host-dashboard-controller.js    ← organiser routing via hash subroutes
+├── style.css
+├── supabase-config.js
+├── supabase-schema.sql
+├── supabase-ml-admin.sql
+└── docs/
+    ├── README.md          documentation index
+    ├── SETUP.md           local setup and troubleshooting
+    ├── ARCHITECTURE.md    frontend architecture and evolution path
+    ├── SUPABASE.md        schema rollout and ownership model
+    ├── GITHUB_PAGES.md    static hosting deployment checklist
+    ├── SECURITY.md        key handling, RLS, response playbook
+    └── ML_DATA.md         ML feature views and training data notes
 ```
+
+---
 
 ## Quick start
 
-1. Clone this repository.
-2. Open it in VS Code.
-3. Serve it from a local static server (for example Live Server).
-4. Open the local URL and test the core flow:
-   - onboarding
-   - browse events
-   - register for an event
-   - check profile/tickets
-   - if organizer access is enabled, open host dashboard
+```bash
+# 1. Clone
+git clone https://github.com/MubiruEltonFelix1/toka-events.git
+cd toka-events
 
-Detailed setup is in docs/SETUP.md.
+# 2. Serve locally (VS Code Live Server or any static server)
+# Open the local URL and run through the core flow:
+#   → onboarding
+#   → browse events
+#   → register for an event
+#   → check profile / tickets
+#   → open host dashboard (if organiser access is enabled)
+```
 
-## Supabase support
+Detailed setup: [`docs/SETUP.md`](docs/SETUP.md)
 
-Supabase integration is optional and designed to be safe for frontend usage:
+---
 
-- Use only publishable credentials in supabase-config.js
-- Keep RLS enabled
-- Scope rows to owner_user_id through anonymous auth user sessions
-- Run schema scripts before expecting sync behavior
+## Supabase integration
 
-Full guide: docs/SUPABASE.md.
+Supabase is **optional**. The app runs fully offline without it.
 
-## Documentation map
+When you do connect it:
 
-- docs/README.md: documentation index
-- docs/SETUP.md: local setup and troubleshooting
-- docs/ARCHITECTURE.md: current frontend architecture and evolution path
-- docs/SUPABASE.md: schema rollout, ownership model, and operations
-- docs/GITHUB_PAGES.md: static hosting deployment checklist
-- docs/SECURITY.md: key handling, RLS, and response playbook
-- docs/ML_DATA.md: ML feature views and training data notes
+- Use only publishable credentials in `supabase-config.js` — never service keys in the frontend
+- Keep RLS enabled at all times
+- Scope all rows to `owner_user_id` through anonymous auth sessions
+- Run schema scripts before expecting sync behaviour
 
-## Current status
+Full guide: [`docs/SUPABASE.md`](docs/SUPABASE.md)
 
-This repository is active and evolving.
+---
 
-Recent changes include:
+## What's changed recently
 
 - Dedicated host dashboard controller routing through hash subroutes
 - Stronger owner-based Supabase row access patterns
-- ML feature/training SQL views for analytics workflows
-- Public event browsing cache separation from organizer private access
+- ML feature and training SQL views for analytics workflows
+- Public event browsing cache separated from organiser private access
+
+---
 
 ## Contributing
 
-Contributions are welcome.
+Practical improvements are the most welcome kind.
 
-If you want to help, start with practical improvements:
+Good places to start:
 
-- UX clarity for event registration and host workflows
-- accessibility and performance improvements
-- test coverage and reliability checks
-- documentation and onboarding improvements
+- **UX** — registration flow clarity, host workflow improvements
+- **Accessibility** — keyboard nav, screen reader support, contrast
+- **Performance** — load time on low-end Android devices
+- **Tests** — coverage for registration logic and ticket generation
+- **Docs** — onboarding improvements, clearer setup steps
 
-## License
+Open an issue first if you're making a significant change. No surprises.
 
-MIT
+---
+
+## Documentation
+
+| File | What's in it |
+|---|---|
+| [`docs/SETUP.md`](docs/SETUP.md) | Local setup and troubleshooting |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Frontend architecture and evolution path |
+| [`docs/SUPABASE.md`](docs/SUPABASE.md) | Schema rollout, ownership model, operations |
+| [`docs/GITHUB_PAGES.md`](docs/GITHUB_PAGES.md) | Static hosting deployment checklist |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Key handling, RLS, response playbook |
+| [`docs/ML_DATA.md`](docs/ML_DATA.md) | ML feature views and training data notes |
+
+---
+
+<div align="center">
+
+MIT License · Built in public by [Elton Felix](https://github.com/MubiruEltonFelix1)
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1a15,50:1a0d2e,100:0d0d14&height=100&section=footer" width="100%"/>
+
+</div>
